@@ -209,20 +209,25 @@ export function euclideanDistance(a, b) {
 
 /**
  * Match a probe embedding against all enrolled embeddings for a course.
- * Returns the best match if similarity exceeds the threshold.
+ * Returns the best match classified into one of three confidence bands.
  *
  * This implements Section 3.5.2 of the methodology:
  * matching is scoped to enrolled students in the active course only,
  * not against the full student table.
  *
+ * Three-band architecture:
+ *  - 'high'      : similarity >= 0.82 — strong match, auto-accept
+ *  - 'uncertain' : similarity >= threshold — marginal match, flag for review
+ *  - 'reject'    : similarity < threshold — no match
+ *
  * @param {Float32Array}  probeEmbedding   - live extracted embedding
  * @param {Array}         courseEmbeddings - from getEmbeddingsByCourse()
  * @param {number}        threshold        - cosine similarity threshold (default 0.60)
- * @returns {{ match: Object|null, similarity: number, distance: number }}
+ * @returns {{ match: Object|null, similarity: number, distance: number, band: 'high'|'uncertain'|'reject' }}
  */
 export function matchEmbedding(probeEmbedding, courseEmbeddings, threshold = 0.60) {
   if (!courseEmbeddings || courseEmbeddings.length === 0) {
-    return { match: null, similarity: 0, distance: 1 }
+    return { match: null, similarity: 0, distance: 1, band: 'reject' }
   }
 
   let bestMatch = null
@@ -239,15 +244,30 @@ export function matchEmbedding(probeEmbedding, courseEmbeddings, threshold = 0.6
     }
   }
 
+  if (bestSimilarity >= 0.82) {
+    return {
+      match:      bestMatch,
+      similarity: bestSimilarity,
+      distance:   1 - bestSimilarity,
+      band:       'high',
+    }
+  }
+
   if (bestSimilarity >= threshold) {
     return {
       match:      bestMatch,
       similarity: bestSimilarity,
       distance:   1 - bestSimilarity,
+      band:       'uncertain',
     }
   }
 
-  return { match: null, similarity: bestSimilarity, distance: 1 - bestSimilarity }
+  return {
+    match:      null,
+    similarity: bestSimilarity,
+    distance:   1 - bestSimilarity,
+    band:       'reject',
+  }
 }
 
 /**

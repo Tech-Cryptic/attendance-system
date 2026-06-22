@@ -172,10 +172,16 @@ export default function AttendancePage() {
         const probeEmbedding = averageEmbeddings(captured)
 
         // 4. Course-scoped nearest-neighbour match
-        const { match, similarity, distance } = matchEmbedding(probeEmbedding, courseEmbeddings)
+        const { match, similarity, distance, band } = matchEmbedding(probeEmbedding, courseEmbeddings)
 
-        if (!match) {
+        if (!match || band === 'reject') {
           setMatchError(`Face not recognised (best similarity: ${(similarity * 100).toFixed(1)}%). Please re-enroll or try again.`)
+          setIsProcessing(false)
+          return
+        }
+
+        if (band === 'uncertain') {
+          setMatchError(`Low confidence match (${(similarity * 100).toFixed(1)}%). Please scan your QR code to confirm your identity.`)
           setIsProcessing(false)
           return
         }
