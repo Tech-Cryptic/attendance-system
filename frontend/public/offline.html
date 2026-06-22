@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0a1a" />
+  <title>You're Offline — FaceAttend</title>
+  <link rel="icon" href="/icons/icon-192.png" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --brand: #7c3aed;
+      --brand-light: #4f46e5;
+      --bg: #080810;
+      --surface: #0e0e1c;
+      --text: #f1f5f9;
+      --muted: #475569;
+      --border: rgba(255,255,255,0.08);
+      --warning: #f59e0b;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(circle at 20% 50%, rgba(124,58,237,0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(6,182,212,0.08) 0%, transparent 40%);
+      pointer-events: none;
+    }
+    .card {
+      background: rgba(20,20,42,0.85);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 420px;
+      width: 100%;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 0 40px rgba(124,58,237,0.2);
+      position: relative;
+      z-index: 1;
+      animation: fadeUp 0.5s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .icon {
+      width: 72px; height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed, #06b6d4);
+      display: grid; place-items: center;
+      margin: 0 auto 24px;
+      font-size: 32px;
+      box-shadow: 0 0 30px rgba(124,58,237,0.4);
+    }
+    h1 {
+      font-size: 22px; font-weight: 800;
+      margin-bottom: 12px;
+    }
+    p {
+      color: #94a3b8; font-size: 14px;
+      line-height: 1.7; margin-bottom: 24px;
+    }
+    .status-row {
+      display: flex; align-items: center; gap: 8px;
+      justify-content: center; margin-bottom: 28px;
+      font-size: 13px; color: var(--warning);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--warning);
+      animation: pulse 1.5s ease infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+    .notice {
+      background: rgba(124,58,237,0.08);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: left;
+      line-height: 1.7;
+      margin-bottom: 24px;
+    }
+    .notice strong { color: var(--text); }
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 28px; border: none; cursor: pointer;
+      border-radius: 10px; font-size: 14px; font-weight: 600;
+      text-decoration: none;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: #fff;
+      box-shadow: 0 0 20px rgba(124,58,237,0.3);
+      transition: all 0.2s;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 24px rgba(124,58,237,0.4); }
+    .sub {
+      margin-top: 20px;
+      font-size: 12px; color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📡</div>
+
+    <div class="status-row">
+      <div class="dot"></div>
+      No internet connection
+    </div>
+
+    <h1>You're Offline</h1>
+    <p>
+      FaceAttend is designed to work offline. Any attendance you mark right now
+      will be saved to your device and synced automatically when you reconnect.
+    </p>
+
+    <div class="notice">
+      <strong>✅ What still works offline:</strong><br/>
+      Marking attendance · Face recognition · Liveness detection<br/><br/>
+      <strong>⏳ Requires connection:</strong><br/>
+      Enrollment · Admin dashboard · Exporting reports
+    </div>
+
+    <a class="btn" href="/" onclick="window.location.reload()">
+      ↩ Return to App
+    </a>
+
+    <p class="sub">
+      FaceAttend will reconnect automatically.<br/>
+      Your queued records are safe in local storage.
+    </p>
+  </div>
+
+  <script>
+    // Auto-redirect when connectivity restored
+    window.addEventListener('online', () => {
+      window.location.href = '/'
+    })
+  </script>
+</body>
+</html>
