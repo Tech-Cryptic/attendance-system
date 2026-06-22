@@ -5,20 +5,36 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Railway gives postgres:// but psycopg2 requires postgresql://
+_raw_url = os.getenv("DATABASE_URL", "")
+DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url else None
 
-# Connection pool: min 1, max 10 connections
-connection_pool = psycopg2.pool.SimpleConnectionPool(
-    1, 10, DATABASE_URL
-)
+# Lazy singleton — created on first use so the app can still start
+# even if DATABASE_URL is not yet injected at import time.
+_pool = None
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        if not DATABASE_URL:
+            raise RuntimeError(
+                "DATABASE_URL environment variable is not set. "
+                "Add it in Railway → backend service → Variables."
+            )
+        _pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL)
+    return _pool
+
 
 def get_connection():
     """Borrow a connection from the pool."""
-    return connection_pool.getconn()
+    return _get_pool().getconn()
+
 
 def release_connection(conn):
     """Return a connection to the pool."""
-    connection_pool.putconn(conn)
+    _get_pool().putconn(conn)
+
 
 def test_connection():
     """Quick sanity check used at startup."""
