@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: faceattend-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: oregon
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: faceattend-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: HMAC_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRY_MINUTES
+        value: "60"
+      - key: CORS_ORIGINS
+        value: https://frontend-ten-rouge-l0enu54szr.vercel.app
+      - key: FRONTEND_URL
+        value: https://frontend-ten-rouge-l0enu54szr.vercel.app
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+databases:
+  - name: faceattend-db
+    plan: free
+    region: oregon
+    databaseName: attendance_db
+    user: postgres
