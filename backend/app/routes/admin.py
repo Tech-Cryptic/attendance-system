@@ -65,8 +65,10 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
 
 
 class CourseCreate(BaseModel):
-    course_code: str
-    course_title: str
+    course_code:    str
+    course_title:   str
+    expected_count: int | None = None
+    matric_list:    list[str] = []     # official matric numbers for this course
 
 
 @router.post("/courses", status_code=201)
@@ -74,21 +76,50 @@ def create_course(
     course: CourseCreate,
     actor: dict = Depends(require_roles("admin"))
 ):
-    """Admin-only: create a new course."""
+    """Admin-only: create a new course with optional enrollment cap and matric list."""
+    import secrets as _secrets
+    from datetime import datetime, timedelta, timezone
+
     conn = get_connection()
     try:
         cur = conn.cursor()
+
+        # Generate a course-level enrollment link token
+        link_token = _secrets.token_urlsafe(32)
+        link_expires = datetime.now(timezone.utc) + timedelta(days=30)
+        matric_arr = course.matric_list if course.matric_list else None
+
         cur.execute(
-            "INSERT INTO courses (course_code, course_title) VALUES (%s, %s) "
-            "ON CONFLICT (course_code) DO NOTHING RETURNING course_code",
-            (course.course_code.strip().upper(), course.course_title.strip())
+            """INSERT INTO courses
+               (course_code, course_title, expected_count, matric_list,
+                enrollment_link_token, enrollment_link_expires_at)
+               VALUES (%s, %s, %s, %s, %s, %s)
+               ON CONFLICT (course_code) DO NOTHING
+               RETURNING course_code""",
+            (
+                course.course_code.strip().upper(),
+                course.course_title.strip(),
+                course.expected_count,
+                matric_arr,
+                link_token,
+                link_expires,
+            )
         )
         result = cur.fetchone()
         conn.commit()
         cur.close()
         if not result:
             raise HTTPException(status_code=409, detail=f"Course {course.course_code} already exists")
-        return {"course_code": course.course_code.strip().upper(), "course_title": course.course_title.strip(), "enrolled_count": 0}
+
+        enroll_url = f"/enroll?token={link_token}&course={course.course_code.strip().upper()}"
+        return {
+            "course_code":      course.course_code.strip().upper(),
+            "course_title":     course.course_title.strip(),
+            "expected_count":   course.expected_count,
+            "enrolled_count":   0,
+            "enrollment_link_token": link_token,
+            "enrollment_url":   enroll_url,
+        }
     except HTTPException:
         conn.rollback(); raise
     except Exception as e:
@@ -96,6 +127,47 @@ def create_course(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         release_connection(conn)
+
+
+@router.post("/courses/{course_code}/generate-link")
+def regenerate_enrollment_link(
+    course_code: str,
+    actor: dict = Depends(require_roles("admin"))
+):
+    """Regenerate the enrollment link token for a course (e.g. if leaked)."""
+    import secrets as _secrets
+    from datetime import datetime, timedelta, timezone
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        link_token = _secrets.token_urlsafe(32)
+        link_expires = datetime.now(timezone.utc) + timedelta(days=30)
+        cur.execute(
+            """UPDATE courses
+               SET enrollment_link_token = %s,
+                   enrollment_link_expires_at = %s
+               WHERE course_code = %s
+               RETURNING course_code""",
+            (link_token, link_expires, course_code.upper())
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Course not found")
+        conn.commit()
+        cur.close()
+        return {
+            "course_code":           course_code.upper(),
+            "enrollment_link_token": link_token,
+            "enrollment_url":        f"/enroll?token={link_token}&course={course_code.upper()}",
+        }
+    except HTTPException:
+        conn.rollback(); raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
 
 
 @router.get("/lecturers")

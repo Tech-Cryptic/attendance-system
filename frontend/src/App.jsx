@@ -11,6 +11,7 @@ const LoginPage         = lazy(() => import('./pages/auth/LoginPage'))
 const AdminDashboard    = lazy(() => import('./pages/admin/AdminDashboard'))
 const LecturerDashboard = lazy(() => import('./pages/lecturer/LecturerDashboard'))
 const SessionPage       = lazy(() => import('./pages/lecturer/SessionPage'))
+const BatchScanPage     = lazy(() => import('./pages/lecturer/BatchScanPage'))
 const StudentDashboard  = lazy(() => import('./pages/student/StudentDashboard'))
 const EnrollPage        = lazy(() => import('./pages/student/EnrollPage'))
 const AttendancePage    = lazy(() => import('./pages/student/AttendancePage'))
@@ -142,6 +143,12 @@ export default function App() {
             <Route path="/lecturer/session/:sessionId" element={
               <ProtectedRoute allowedRoles={['lecturer', 'admin']}>
                 <SessionPage />
+              </ProtectedRoute>
+            } />
+            {/* Batch scan — multi-face proximity scanner */}
+            <Route path="/batch-scan/:sessionId/:courseCode" element={
+              <ProtectedRoute allowedRoles={['lecturer', 'admin']}>
+                <BatchScanPage />
               </ProtectedRoute>
             } />
 

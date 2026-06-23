@@ -1,3 +1,4 @@
+﻿import { API_BASE } from '../../lib/api'
 /**
  * Sync Queue — Offline-First Attendance Sync Manager
  *
@@ -15,7 +16,6 @@
 import db from '../db/schema'
 import { toast } from '../../components/Toast'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const SYNC_DEBOUNCE_MS = 2000
 const MAX_RETRY = 3
 

@@ -62,6 +62,55 @@ def get_student_attendance(actor: dict = Depends(require_roles("student", "admin
         release_connection(conn)
 
 
+# ── Student: active fallback QR sessions ──────────────────────
+
+@router.get("/student/fallback-sessions")
+def get_student_fallback_sessions(actor: dict = Depends(require_roles("student"))):
+    """
+    Return any active sessions where:
+    - Fallback QR has been released by the lecturer
+    - The fallback window has not expired
+    - The student is enrolled in the course
+    - The student has NOT already been marked present
+    Used by StudentDashboard to conditionally show the fallback QR widget.
+    """
+    matric = actor.get("matric_number")
+    if not matric:
+        raise HTTPException(status_code=400, detail="No matric_number in token payload")
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        now = datetime.now(timezone.utc)
+        cur.execute(
+            """SELECT s.session_id, s.course_code, s.fallback_expires_at
+               FROM sessions s
+               JOIN course_enrollments ce ON ce.course_code = s.course_code
+               WHERE ce.matric_number   = %s
+                 AND s.active            = TRUE
+                 AND s.fallback_released = TRUE
+                 AND s.fallback_expires_at > %s
+                 AND NOT EXISTS (
+                   SELECT 1 FROM attendance_records ar
+                   WHERE ar.session_id    = s.session_id
+                     AND ar.matric_number = %s
+                 )
+               ORDER BY s.fallback_expires_at ASC""",
+            (matric, now, matric)
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [
+            {
+                "session_id":       str(r[0]),
+                "course_code":      r[1],
+                "fallback_expires_at": r[2].isoformat(),
+                "minutes_remaining": max(0, int((r[2] - now).total_seconds() / 60)),
+            }
+            for r in rows
+        ]
+    finally:
+        release_connection(conn)
 
 
 # ── Pydantic models ───────────────────────────────────────────

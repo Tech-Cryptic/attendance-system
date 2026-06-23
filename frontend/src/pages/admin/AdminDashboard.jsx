@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import Sidebar from '../../components/Sidebar'
 import { useAuth } from '../../context/AuthContext'
+import { API_BASE } from '../../lib/api'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -29,10 +29,18 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [tokenMsg,     setTokenMsg]     = useState('')
   const [newToken,     setNewToken]     = useState('')
 
-  // ── Course creation form ─────────────────────────────────────
-  const [courseForm,    setCourseForm]    = useState({ course_code: '', course_title: '' })
+  // ── Course creation form ────────────────────────────────────
+  const [courseForm,    setCourseForm]    = useState({ course_code: '', course_title: '', expected_count: '', matric_list: '' })
   const [courseCreating,setCourseCreating]= useState(false)
   const [courseMsg,     setCourseMsg]     = useState('')
+  const [newCourseLink, setNewCourseLink] = useState('')   // enrollment URL from newly created course
+  const [copiedLink,    setCopiedLink]    = useState(false)
+
+  function copyLink(url) {
+    navigator.clipboard.writeText(window.location.origin + url)
+      .then(() => { setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000) })
+      .catch(() => {})
+  }
 
   // ── Load data ────────────────────────────────────────────────
   useEffect(() => {
@@ -64,17 +72,29 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
   async function handleCreateCourse(e) {
     e.preventDefault()
-    setCourseCreating(true); setCourseMsg('')
+    setCourseCreating(true); setCourseMsg(''); setNewCourseLink('')
     try {
+      // Parse matric list from textarea (one per line or comma-separated)
+      const rawList = courseForm.matric_list.trim()
+      const matricList = rawList
+        ? rawList.split(/[\n,]+/).map(m => m.trim()).filter(Boolean)
+        : []
+
       const res = await fetch(`${API_BASE}/admin/courses`, {
         method: 'POST', headers: authHeaders(token),
-        body: JSON.stringify(courseForm)
+        body: JSON.stringify({
+          course_code:    courseForm.course_code.trim().toUpperCase(),
+          course_title:   courseForm.course_title.trim(),
+          expected_count: courseForm.expected_count ? parseInt(courseForm.expected_count) : null,
+          matric_list:    matricList,
+        })
       })
       const data = await res.json()
       if (!res.ok) { setCourseMsg(`Error: ${data.detail}`); return }
-      setCourseMsg(`✅ Course "${courseForm.course_code}" created.`)
+      setCourseMsg(`✅ Course "${data.course_code}" created. Share the enrollment link below.`)
+      setNewCourseLink(data.enrollment_url)
       setCourses(prev => [...prev, data])
-      setCourseForm({ course_code: '', course_title: '' })
+      setCourseForm({ course_code: '', course_title: '', expected_count: '', matric_list: '' })
     } catch { setCourseMsg('Network error.') }
     finally  { setCourseCreating(false) }
   }
@@ -146,38 +166,110 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
           {tab === 'courses' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div className="card">
-                <h4 style={{ marginBottom: '16px' }}>Create Course</h4>
+                <h4 style={{ marginBottom: '4px' }}>Create Course</h4>
+                <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
+                  Admin sets the course up. Students self-enroll via the generated link. System flags overflow if enrolled &gt; expected.
+                </p>
                 {courseMsg && <div className={`alert ${courseMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '12px' }}>{courseMsg}</div>}
-                <form onSubmit={handleCreateCourse} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                  <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
-                    <label className="form-label">Course Code</label>
-                    <input className="form-input font-mono" placeholder="e.g. CSC401" value={courseForm.course_code}
-                      onChange={e => setCourseForm(p => ({...p, course_code: e.target.value}))} required />
+
+                {/* Enrollment link after creation */}
+                {newCourseLink && (
+                  <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'rgba(16,185,129,0.08)', borderRadius: 10, border: '1px solid rgba(16,185,129,0.3)' }}>
+                    <p style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, margin: '0 0 8px' }}>🔗 Enrollment Link — share with students:</p>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <code style={{ flex: 1, fontSize: 12, background: 'var(--bg-card-alt)', padding: '6px 10px', borderRadius: 6, wordBreak: 'break-all' }}>
+                        {window.location.origin + newCourseLink}
+                      </code>
+                      <button
+                        onClick={() => copyLink(newCourseLink)}
+                        className="btn btn-sm btn-ghost"
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {copiedLink ? '✅ Copied!' : '📋 Copy'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="form-group" style={{ flex: 2, minWidth: 200 }}>
-                    <label className="form-label">Course Title</label>
-                    <input className="form-input" placeholder="e.g. Computer Networks" value={courseForm.course_title}
-                      onChange={e => setCourseForm(p => ({...p, course_title: e.target.value}))} required />
+                )}
+
+                <form onSubmit={handleCreateCourse} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
+                      <label className="form-label">Course Code</label>
+                      <input className="form-input font-mono" placeholder="e.g. CSC401" value={courseForm.course_code}
+                        onChange={e => setCourseForm(p => ({...p, course_code: e.target.value}))} required />
+                    </div>
+                    <div className="form-group" style={{ flex: 2, minWidth: 200 }}>
+                      <label className="form-label">Course Title</label>
+                      <input className="form-input" placeholder="e.g. Computer Networks" value={courseForm.course_title}
+                        onChange={e => setCourseForm(p => ({...p, course_title: e.target.value}))} required />
+                    </div>
+                    <div className="form-group" style={{ minWidth: 120 }}>
+                      <label className="form-label">Expected Students</label>
+                      <input className="form-input" type="number" min="1" placeholder="e.g. 120"
+                        value={courseForm.expected_count}
+                        onChange={e => setCourseForm(p => ({...p, expected_count: e.target.value}))} />
+                    </div>
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={courseCreating}>
-                    {courseCreating ? 'Creating…' : 'Create'}
+                  <div className="form-group">
+                    <label className="form-label">
+                      Official Matric Number List
+                      <span className="text-xs text-muted" style={{ marginLeft: 8, fontWeight: 400 }}>One per line or comma-separated. Students not on this list cannot self-enroll.</span>
+                    </label>
+                    <textarea
+                      className="form-input font-mono"
+                      rows={4}
+                      placeholder="19/52EE001&#10;19/52EE002&#10;19/52EE003"
+                      value={courseForm.matric_list}
+                      onChange={e => setCourseForm(p => ({...p, matric_list: e.target.value}))}
+                      style={{ resize: 'vertical', fontSize: 12 }}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={courseCreating} style={{ alignSelf: 'flex-start' }}>
+                    {courseCreating ? 'Creating…' : '➕ Create Course & Generate Link'}
                   </button>
                 </form>
               </div>
+
+              {/* Over-enrollment flags */}
+              {courses.some(c => c.over_enrollment_flagged) && (
+                <div className="alert alert-danger">
+                  ⚠️ <strong>Over-enrollment detected</strong> in {courses.filter(c => c.over_enrollment_flagged).map(c => c.course_code).join(', ')}.
+                  Enrolled count exceeds the expected class size. Review immediately.
+                </div>
+              )}
+
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h4 style={{ margin: 0 }}>All Courses ({courses.length})</h4>
                 </div>
                 <table className="data-table">
-                  <thead><tr><th>Code</th><th>Title</th><th>Enrolled</th></tr></thead>
+                  <thead><tr><th>Code</th><th>Title</th><th>Enrolled</th><th>Expected</th><th>Status</th><th>Enrollment Link</th></tr></thead>
                   <tbody>
                     {courses.length === 0
-                      ? <tr><td colSpan={3} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
+                      ? <tr><td colSpan={6} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
                       : courses.map(c => (
                           <tr key={c.course_code}>
                             <td><span className="badge badge-brand font-mono">{c.course_code}</span></td>
                             <td>{c.course_title}</td>
-                            <td>{c.enrolled_count ?? '—'}</td>
+                            <td style={{ fontWeight: 600 }}>{c.enrolled_count ?? '—'}</td>
+                            <td style={{ color: 'var(--text-muted)' }}>{c.expected_count ?? '—'}</td>
+                            <td>
+                              {c.over_enrollment_flagged
+                                ? <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>⚠️ Over</span>
+                                : <span className="badge badge-success">✅ OK</span>
+                              }
+                            </td>
+                            <td>
+                              {c.enrollment_link_token ? (
+                                <button
+                                  className="btn btn-sm btn-ghost font-mono"
+                                  style={{ fontSize: 11 }}
+                                  onClick={() => copyLink(`/enroll?token=${c.enrollment_link_token}&course=${c.course_code}`)}
+                                >
+                                  📋 Copy Link
+                                </button>
+                              ) : '—'}
+                            </td>
                           </tr>
                         ))
                     }

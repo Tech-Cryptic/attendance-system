@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+﻿import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode'
@@ -7,8 +7,8 @@ import LivenessGate from '../../components/LivenessGate'
 import { matchEmbedding, averageEmbeddings } from '../../lib/faceai/detector'
 import { queueAttendance, onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
 import db from '../../lib/db/schema'
+import { API_BASE } from '../../lib/api'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const CAPTURE_FRAMES = 5
 
 // ── Steps ──────────────────────────────────────────────────────

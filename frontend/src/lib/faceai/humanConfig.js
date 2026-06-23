@@ -1,12 +1,16 @@
 /**
  * @vladmandic/human — Configuration
  *
+ * Two configs:
+ *  humanConfig    — single-face mode (enrollment, individual fallback)
+ *  batchConfig    — multi-face proximity-batch mode (lecturer room scan)
+ *
  * Aligned with Chapter 3 methodology:
  * - 478-point dense 3D FaceMesh (468 mesh + 10 iris landmarks per eye)
  * - 1024-dim FaceRes descriptor embedding
  * - WebGPU → WebGL fallback execution
- * - Dual-Layer PAD: built-in antispoof model (passive) + EAR blink (active)
- * - NDPR: no frame upload — all inference on-device
+ * - Three-layer PAD: antispoof model + EAR blink (active) + rPPG (passive)
+ * - NDPA 2023: no frame upload — all inference on-device
  *
  * Models are served from the vladmandic CDN and cached by the
  * Workbox service worker after first load (offline-first).
@@ -43,7 +47,7 @@ export const humanConfig = {
       enabled: true,
       modelPath: 'blazeface.json',
       rotation: false,          // disable rotation for speed (device held upright)
-      maxDetected: 1,           // attendance = 1 person at a time
+      maxDetected: 1,           // single-face mode: enrollment + fallback
       minConfidence: 0.35,
       iouThreshold: 0.1,
       skipFrames: 5,            // re-detect every 5 frames, track in between
@@ -146,4 +150,37 @@ export const drawConfig = {
   labelColor: '#ffffff',
   lineWidth: 1,
   pointSize: 2,
+}
+
+/**
+ * Batch config — multi-face proximity scan mode (Section 3.5 proximity-batch).
+ *
+ * Differences from humanConfig:
+ *  - maxDetected: 15 (proximity group, up to 15 faces simultaneously)
+ *  - iris disabled (not needed for batch matching; saves ~40ms per face)
+ *  - skipFrames: 8 (allow more time between full detections)
+ *  - antispoof/liveness skipFrames: 15 (run less frequently in batch)
+ */
+export const batchConfig = {
+  ...humanConfig,
+  face: {
+    ...humanConfig.face,
+    detector: {
+      ...humanConfig.face.detector,
+      maxDetected: 15,        // proximity-batch: up to 15 students simultaneously
+      minConfidence: 0.40,    // slightly higher threshold for group detection
+      skipFrames: 8,
+    },
+    iris: {
+      enabled: false,         // disabled in batch mode for performance
+    },
+    antispoof: {
+      ...humanConfig.face.antispoof,
+      skipFrames: 15,         // run less frequently in batch
+    },
+    liveness: {
+      ...humanConfig.face.liveness,
+      skipFrames: 15,
+    },
+  },
 }

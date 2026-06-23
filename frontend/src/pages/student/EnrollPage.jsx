@@ -1,12 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+﻿import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import FaceCamera from '../../components/FaceCamera'
 import NDPRConsent from '../../components/NDPRConsent'
 import LivenessGate from '../../components/LivenessGate'
 import { averageEmbeddings } from '../../lib/faceai/detector'
 import QRCode from 'qrcode'
+import { API_BASE } from '../../lib/api'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const CAPTURE_FRAMES = 5    // number of frames to average for robust embedding
 const CAPTURE_INTERVAL_MS = 800  // wait 800ms between captures
 

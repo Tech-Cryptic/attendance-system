@@ -112,6 +112,61 @@ export async function detectAndEmbed(source) {
   }
 }
 
+// ── Multi-Face Batch Detection ──────────────────────────────────
+
+/**
+ * Run a full face inference pass and return ALL detected faces.
+ * Used by BatchScanPage for the proximity-batch lecturer scan mode.
+ *
+ * Unlike detectAndEmbed() which returns the single best face,
+ * this returns every face the model detects (up to batchConfig.maxDetected).
+ *
+ * Each result includes:
+ *  - embedding       : 1024-dim FaceRes descriptor for matching
+ *  - box / boxRaw    : bounding box for UI overlay rendering
+ *  - antispoofScore  : passive liveness — filters photo attacks
+ *  - faceScore       : detection confidence
+ *
+ * NDPA compliance: no frame data leaves this module.
+ *
+ * @param {HTMLVideoElement|HTMLCanvasElement} source
+ * @param {number} [antispoofThreshold=0.4] - min real score to include a face
+ * @returns {Promise<Array<BatchFaceResult>>}
+ */
+export async function detectAndEmbedAll(source, antispoofThreshold = 0.4) {
+  if (!humanInstance || !isReady) throw new Error('Human not initialized. Call initHuman() first.')
+
+  const result = await humanInstance.detect(source)
+
+  if (!result.face || result.face.length === 0) return []
+
+  const faces = []
+
+  for (const face of result.face) {
+    // Skip low-confidence detections
+    if (!face.embedding || face.embedding.length !== 1024) continue
+    if (face.faceScore < 0.4) continue
+
+    // Passive antispoof filter — blocks photo/screen attacks in batch mode
+    const antispoofScore = face.real ?? null
+    if (antispoofScore !== null && antispoofScore < antispoofThreshold) continue
+
+    faces.push({
+      embedding:      face.embedding,       // Float32Array[1024]
+      box:            face.box,             // [x, y, w, h] pixels
+      boxRaw:         face.boxRaw,          // [x, y, w, h] normalized
+      annotations:    face.annotations,
+      antispoofScore: antispoofScore,
+      livenessScore:  face.live ?? null,
+      faceScore:      face.faceScore,
+    })
+  }
+
+  return faces
+}
+
+
+
 // ── Iris Descriptor ────────────────────────────────────────────
 
 /**

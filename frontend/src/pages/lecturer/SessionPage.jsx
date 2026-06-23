@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+﻿import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
+import { API_BASE } from '../../lib/api'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -330,7 +330,41 @@ export default function SessionPage() {
               </div>
             </div>
 
+            {/* ── Batch Scan — Primary attendance method ── */}
+            {session.active && !isExpired && (
+              <div className="card" style={{
+                background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.08))',
+                borderColor: 'rgba(124,58,237,0.4)',
+                padding: '20px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: '0 0 4px', color: '#a78bfa' }}>
+                      🎯 Batch Face Scan
+                    </h4>
+                    <p className="text-sm text-muted" style={{ margin: 0 }}>
+                      Point your camera at groups of up to 15 students. The system auto-detects
+                      and matches enrolled students simultaneously.
+                    </p>
+                  </div>
+                  <a
+                    id="btn-batch-scan"
+                    href={`/batch-scan/${session.session_id}/${session.course_code}`}
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
+                      whiteSpace: 'nowrap',
+                      fontWeight: 700,
+                    }}
+                  >
+                    📸 Open Batch Scanner
+                  </a>
+                </div>
+              </div>
+            )}
+
             {/* Live attendance list */}
+
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
                 <h4 style={{ margin: 0 }}>

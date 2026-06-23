@@ -1,9 +1,15 @@
 services:
   - type: web
-    name: faceattend-backend
+    name: faceattend
     runtime: python
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
+    # 1. Build the React frontend, 2. Install Python deps
+    buildCommand: >
+      cd ../frontend &&
+      npm ci &&
+      npm run build &&
+      cd ../backend &&
+      pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     plan: free
     region: oregon
@@ -20,12 +26,14 @@ services:
         value: HS256
       - key: JWT_EXPIRY_MINUTES
         value: "60"
+      # Same origin — no CORS needed in production, but kept for safety
       - key: CORS_ORIGINS
-        value: https://frontend-ten-rouge-l0enu54szr.vercel.app
-      - key: FRONTEND_URL
-        value: https://frontend-ten-rouge-l0enu54szr.vercel.app
+        value: "*"
       - key: PYTHON_VERSION
         value: "3.11.0"
+      # Tells seed.py the correct URL for enrollment links
+      - key: FRONTEND_URL
+        sync: false   # filled in after first deploy (use the Render service URL)
 
 databases:
   - name: faceattend-db
