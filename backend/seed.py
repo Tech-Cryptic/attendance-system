@@ -80,9 +80,32 @@ def main():
         print(f"✅ Connected to database: {DATABASE_URL.split('@')[-1]}")
     except Exception as e:
         print(f"❌ Cannot connect to database: {e}")
-        print("\n📋 Make sure PostgreSQL is running and schema.sql has been applied:")
-        print("   psql -U postgres -c \"CREATE DATABASE attendance_db;\"")
-        print("   psql -U postgres -d attendance_db -f schema.sql")
+        print("\n📋 Make sure PostgreSQL is running and DATABASE_URL is correct.")
+        sys.exit(1)
+
+    # Apply schema if tables don't exist
+    try:
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'users'
+            );
+        """)
+        exists = cur.fetchone()[0]
+        if not exists:
+            print("\n📝 Applying schema.sql…")
+            schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+            with open(schema_path, "r", encoding="utf-8") as f:
+                schema_sql = f.read()
+            cur.execute(schema_sql)
+            conn.commit()
+            print("   ✅ Schema applied successfully.")
+        else:
+            print("\n📝 Schema check: tables already exist. Skipping schema apply.")
+    except Exception as e:
+        conn.rollback()
+        print(f"❌ Error checking/applying schema: {e}")
         sys.exit(1)
 
     # ── 1. Create user accounts ──────────────────────────────────
