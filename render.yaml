@@ -3,7 +3,6 @@ services:
     name: faceattend
     runtime: python
     rootDir: backend
-    # 1. Build the React frontend, 2. Install Python deps
     buildCommand: >
       cd ../frontend &&
       npm ci &&
@@ -26,18 +25,15 @@ services:
         value: HS256
       - key: JWT_EXPIRY_MINUTES
         value: "60"
-      # Same origin — no CORS needed in production, but kept for safety
       - key: CORS_ORIGINS
         value: "*"
       - key: PYTHON_VERSION
         value: "3.11.0"
-      # Tells seed.py the correct URL for enrollment links
       - key: FRONTEND_URL
-        sync: false   # filled in after first deploy (use the Render service URL)
+        sync: false
 
 databases:
   - name: faceattend-db
     plan: free
     region: oregon
     databaseName: attendance_db
-    user: postgres
