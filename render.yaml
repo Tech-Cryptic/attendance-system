@@ -9,7 +9,8 @@ services:
       npm run build &&
       cd ../backend &&
       pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: bash start.sh
+
     plan: free
     region: oregon
     envVars:
@@ -30,7 +31,8 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.0"
       - key: FRONTEND_URL
-        sync: false
+        value: https://faceattend-bc91.onrender.com
+
 
 databases:
   - name: faceattend-db
