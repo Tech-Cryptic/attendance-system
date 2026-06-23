@@ -42,19 +42,30 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):
-    conn = get_connection()
+    try:
+        conn = get_connection()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
+
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT id, email, password_hash, role, full_name, linked_matric "
-            "FROM users WHERE email = %s",
-            (req.email,)
-        )
+        try:
+            cur.execute(
+                "SELECT id, email, password_hash, role, full_name, linked_matric "
+                "FROM users WHERE email = %s",
+                (req.email,)
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database query error (users table check): {str(e)}")
+            
         row = cur.fetchone()
         cur.close()
 
-        if not row or not verify_password(req.password, row[2]):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid email or password (no user found)")
+            
+        if not verify_password(req.password, row[2]):
+            raise HTTPException(status_code=401, detail="Invalid email or password (password mismatch)")
 
         user_id, email, _, role, full_name, linked_matric = row
 
@@ -67,8 +78,15 @@ def login(req: LoginRequest):
         })
 
         return TokenResponse(access_token=token, role=role, full_name=full_name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
     finally:
-        release_connection(conn)
+        try:
+            release_connection(conn)
+        except Exception:
+            pass
 
 
 @router.post("/register", status_code=201)
