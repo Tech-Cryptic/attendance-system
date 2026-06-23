@@ -48,6 +48,30 @@ def health_check():
         return {"status": "error", "detail": str(e)}
 
 
+@app.get("/debug/seed")
+def debug_seed():
+    import subprocess
+    try:
+        backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        res = subprocess.run(
+            ["python", "seed.py"],
+            capture_output=True,
+            text=True,
+            cwd=backend_dir
+        )
+        return {
+            "status": "completed",
+            "returncode": res.returncode,
+            "stdout": res.stdout,
+            "stderr": res.stderr
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
 # ── Serve React build (production only) ───────────────────────
 # When deployed on Render, the build step places the compiled
 # frontend in /frontend/dist relative to the repo root.
