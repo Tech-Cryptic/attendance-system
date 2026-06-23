@@ -26,7 +26,8 @@ except ImportError:
     print("psycopg2 not installed. Run:  pip install psycopg2-binary")
     sys.exit(1)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres123@localhost:5432/attendance_db")
+_raw_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres123@localhost:5432/attendance_db")
+DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url else None
 
 # ── Accounts to seed ──────────────────────────────────────────
 ACCOUNTS = [
