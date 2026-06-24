@@ -21,6 +21,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [courses,  setCourses]  = useState([])
   const [lecturers,setLecturers] = useState([])
   const [conflicts,setConflicts]= useState([])
+  const [users,    setUsers]    = useState([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState('')
 
@@ -54,19 +55,22 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       setLoading(true)
       setError('')
       try {
-        const [studRes, crsRes, lecRes] = await Promise.all([
+        const [studRes, crsRes, lecRes, usrRes] = await Promise.all([
           fetch(`${API_BASE}/admin/students`, { headers: authHeaders(token) }),
           fetch(`${API_BASE}/admin/courses`,  { headers: authHeaders(token) }),
           fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) }),
+          fetch(`${API_BASE}/admin/users`, { headers: authHeaders(token) }),
         ])
         const stud = studRes.ok ? await studRes.json() : []
         const crs  = crsRes.ok  ? await crsRes.json()  : []
         const lec  = lecRes.ok  ? await lecRes.json()  : []
+        const usr  = usrRes.ok  ? await usrRes.json()  : []
         const studArr = Array.isArray(stud) ? stud : stud.students ?? []
         const crsArr  = Array.isArray(crs)  ? crs  : crs.courses  ?? []
         setStudents(studArr)
         setCourses(crsArr)
         setLecturers(Array.isArray(lec) ? lec : [])
+        setUsers(Array.isArray(usr) ? usr : [])
         const flagged = studArr.filter(s => s.high_similarity_flag)
         setConflicts(flagged)
         setStats({ students: studArr.length, courses: crsArr.length, conflicts: flagged.length })
@@ -165,14 +169,57 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       }
       setUserMsg(`✅ ${userForm.role.toUpperCase()} "${userForm.full_name}" registered successfully!`)
       setUserForm({ email: '', password: '', full_name: '', role: 'lecturer', linked_matric: '' })
-      if (userForm.role === 'lecturer') {
-        const lecRes = await fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) })
-        if (lecRes.ok) setLecturers(await lecRes.json())
-      }
+      
+      const [usrRes, lecRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/users`, { headers: authHeaders(token) }),
+        fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) }),
+      ])
+      if (usrRes.ok) setUsers(await usrRes.json())
+      if (lecRes.ok) setLecturers(await lecRes.json())
     } catch {
       setUserMsg('Network error registering user.')
     } finally {
       setUserCreating(false)
+    }
+  }
+
+  async function handleDeleteUser(userId, userName) {
+    if (!window.confirm(`Are you sure you want to delete user "${userName}"? This will permanently remove all their associated records.`)) {
+      return
+    }
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        alert(`Error deleting user: ${data.detail}`)
+        return
+      }
+      setUsers(prev => prev.filter(u => u.id !== userId))
+      
+      const [lecRes, studRes, crsRes] = await Promise.all([
+        fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) }),
+        fetch(`${API_BASE}/admin/students`, { headers: authHeaders(token) }),
+        fetch(`${API_BASE}/admin/courses`,  { headers: authHeaders(token) }),
+      ])
+      if (lecRes.ok) setLecturers(await lecRes.json())
+      if (studRes.ok) {
+        const stud = await studRes.json()
+        const studArr = Array.isArray(stud) ? stud : stud.students ?? []
+        setStudents(studArr)
+        const flagged = studArr.filter(s => s.high_similarity_flag)
+        setConflicts(flagged)
+        setStats(prev => ({ ...prev, students: studArr.length, conflicts: flagged.length }))
+      }
+      if (crsRes.ok) {
+        const crs = await crsRes.json()
+        setCourses(Array.isArray(crs) ? crs : crs.courses ?? [])
+      }
+      alert(`User "${userName}" deleted successfully.`)
+    } catch {
+      alert('Network error deleting user.')
     }
   }
 
@@ -462,54 +509,117 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
           {/* ── Create Users ── */}
           {tab === 'users' && (
-            <div className="card">
-              <h4 style={{ marginBottom: '4px' }}>Register User Account</h4>
-              <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
-                Create login accounts for lecturers or students. Student accounts must link to a valid matric number.
-              </p>
-              {userMsg && <div className={`alert ${userMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
-              
-              <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
-                    <label className="form-label">Full Name</label>
-                    <input className="form-input" placeholder="e.g. Dr. John Doe or Jane Smith" value={userForm.full_name}
-                      onChange={e => setUserForm(p => ({...p, full_name: e.target.value}))} required />
-                  </div>
-                  <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
-                    <label className="form-label">Email Address</label>
-                    <input className="form-input" type="email" placeholder="user@unilorin.edu.ng" value={userForm.email}
-                      onChange={e => setUserForm(p => ({...p, email: e.target.value}))} required />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
-                    <label className="form-label">Role</label>
-                    <select className="form-input" value={userForm.role}
-                      onChange={e => setUserForm(p => ({...p, role: e.target.value}))}>
-                      <option value="lecturer">Lecturer</option>
-                      <option value="student">Student</option>
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
-                    <label className="form-label">Password <span style={{ color:'var(--text-muted)', fontWeight:400 }}>(min 8 chars)</span></label>
-                    <input className="form-input" type="password" placeholder="••••••••" minLength={8} value={userForm.password}
-                      onChange={e => setUserForm(p => ({...p, password: e.target.value}))} required />
-                  </div>
-                  {userForm.role === 'student' && (
-                    <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
-                      <label className="form-label">Linked Matric Number</label>
-                      <input className="form-input font-mono" placeholder="e.g. 22/01DL068" value={userForm.linked_matric}
-                        onChange={e => setUserForm(p => ({...p, linked_matric: e.target.value}))} required />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="card">
+                <h4 style={{ marginBottom: '4px' }}>Register User Account</h4>
+                <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
+                  Create login accounts for lecturers or students. Student accounts must link to a valid matric number.
+                </p>
+                {userMsg && <div className={`alert ${userMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
+                
+                <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
+                      <label className="form-label">Full Name</label>
+                      <input className="form-input" placeholder="e.g. Dr. John Doe or Jane Smith" value={userForm.full_name}
+                        onChange={e => setUserForm(p => ({...p, full_name: e.target.value}))} required />
                     </div>
-                  )}
-                </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
+                      <label className="form-label">Email Address</label>
+                      <input className="form-input" type="email" placeholder="user@unilorin.edu.ng" value={userForm.email}
+                        onChange={e => setUserForm(p => ({...p, email: e.target.value}))} required />
+                    </div>
+                  </div>
 
-                <button type="submit" className="btn btn-primary" disabled={userCreating} style={{ alignSelf: 'flex-start' }}>
-                  {userCreating ? 'Registering…' : '👤 Register User'}
-                </button>
-              </form>
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                      <label className="form-label">Role</label>
+                      <select className="form-input" value={userForm.role}
+                        onChange={e => setUserForm(p => ({...p, role: e.target.value}))}>
+                        <option value="lecturer">Lecturer</option>
+                        <option value="student">Student</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                      <label className="form-label">Password <span style={{ color:'var(--text-muted)', fontWeight:400 }}>(min 8 chars)</span></label>
+                      <input className="form-input" type="password" placeholder="••••••••" minLength={8} value={userForm.password}
+                        onChange={e => setUserForm(p => ({...p, password: e.target.value}))} required />
+                    </div>
+                    {userForm.role === 'student' && (
+                      <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                        <label className="form-label">Linked Matric Number</label>
+                        <input className="form-input font-mono" placeholder="e.g. 22/01DL068" value={userForm.linked_matric}
+                          onChange={e => setUserForm(p => ({...p, linked_matric: e.target.value}))} required />
+                      </div>
+                    )}
+                  </div>
+
+                  <button type="submit" className="btn btn-primary" disabled={userCreating} style={{ alignSelf: 'flex-start' }}>
+                    {userCreating ? 'Registering…' : '👤 Register User'}
+                  </button>
+                </form>
+              </div>
+
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h4 style={{ margin: 0 }}>All Registered Users ({users.length})</h4>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Full Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Detail</th>
+                      <th>Created</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>
+                          No users found.
+                        </td>
+                      </tr>
+                    ) : (
+                      users.map(u => (
+                        <tr key={u.id}>
+                          <td style={{ fontWeight: 600 }}>{u.full_name}</td>
+                          <td>{u.email}</td>
+                          <td>
+                            <span className={`badge ${
+                              u.role === 'admin' ? 'badge-brand' :
+                              u.role === 'lecturer' ? 'badge-info' : 'badge-success'
+                            }`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="font-mono text-sm">
+                            {u.role === 'student' ? (u.linked_matric ?? '—') : '—'}
+                          </td>
+                          <td className="text-sm text-muted">
+                            {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
+                          </td>
+                          <td>
+                            {u.id === parseInt(user?.id) ? (
+                              <span className="text-xs text-muted" style={{ fontStyle: 'italic' }}>Active Admin</span>
+                            ) : (
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                style={{ color: 'var(--danger)', fontWeight: 600 }}
+                                onClick={() => handleDeleteUser(u.id, u.full_name)}
+                              >
+                                🗑️ Delete
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

@@ -203,6 +203,90 @@ def list_lecturers(actor: dict = Depends(require_roles("admin"))):
         release_connection(conn)
 
 
+@router.get("/users")
+def list_users(actor: dict = Depends(require_roles("admin"))):
+    """Admin-only: list all registered user accounts (admins, lecturers, students)."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT id, email, role, full_name, linked_matric, created_at
+               FROM users
+               ORDER BY created_at DESC"""
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [
+            {
+                "id":            r[0],
+                "email":         r[1],
+                "role":          r[2],
+                "full_name":     r[3],
+                "linked_matric": r[4],
+                "created_at":    r[5].isoformat() if r[5] else None,
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(
+    user_id: int,
+    actor: dict = Depends(require_roles("admin"))
+):
+    """Admin-only: delete a user account safely, cleaning up references/cascades."""
+    actor_id = int(actor["sub"])
+    if actor_id == user_id:
+        raise HTTPException(status_code=400, detail="Admins cannot delete their own account")
+
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        
+        # 1. Fetch the user info first to know their role and details
+        cur.execute("SELECT role, linked_matric FROM users WHERE id = %s", (user_id,))
+        user_row = cur.fetchone()
+        if not user_row:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        role, linked_matric = user_row
+        
+        if role == "lecturer":
+            # Unassign courses: set lecturer_id to NULL
+            cur.execute("UPDATE courses SET lecturer_id = NULL WHERE lecturer_id = %s", (user_id,))
+            # Unassign sessions: set lecturer_id to NULL
+            cur.execute("UPDATE sessions SET lecturer_id = NULL WHERE lecturer_id = %s", (user_id,))
+            
+        elif role == "student" and linked_matric:
+            # Clean up student-related data
+            # Delete attendance records
+            cur.execute("DELETE FROM attendance_records WHERE matric_number = %s", (linked_matric,))
+            # Delete course enrollments
+            cur.execute("DELETE FROM course_enrollments WHERE matric_number = %s", (linked_matric,))
+            # Delete enrollment tokens
+            cur.execute("DELETE FROM enrollment_tokens WHERE matric_number = %s", (linked_matric,))
+            # Delete from students table
+            cur.execute("DELETE FROM students WHERE matric_number = %s", (linked_matric,))
+
+        # 2. Finally delete from users table
+        cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        conn.commit()
+        cur.close()
+        return
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
 
 
 # ── Export ────────────────────────────────────────────────────

@@ -162,3 +162,66 @@ class TestExport:
         first_line = resp.text.split("\n")[0]
         assert "Matric Number" in first_line
         assert "Course Code" in first_line
+
+
+class TestAdminUsers:
+    def test_users_requires_admin(self, client, student_token):
+        """Student cannot list users -> 403."""
+        resp = client.get("/admin/users", headers=auth_header(student_token))
+        assert resp.status_code == 403
+
+    def test_users_list_admin_ok(self, client, admin_token):
+        """Admin can list users."""
+        resp = client.get("/admin/users", headers=auth_header(admin_token))
+        assert resp.status_code == 200
+        users = resp.json()
+        assert isinstance(users, list)
+        if users:
+            keys = users[0].keys()
+            assert "id" in keys
+            assert "email" in keys
+            assert "role" in keys
+            assert "full_name" in keys
+            assert "password_hash" not in keys  # security check
+
+    def test_delete_user_self_forbidden(self, client, admin_token):
+        """Admin cannot delete their own account."""
+        me_resp = client.get("/auth/me", headers=auth_header(admin_token))
+        admin_id = me_resp.json()["sub"]
+        
+        resp = client.delete(f"/admin/users/{admin_id}", headers=auth_header(admin_token))
+        assert resp.status_code == 400
+        assert "cannot delete their own account" in resp.json()["detail"]
+
+    def test_delete_user_lecturer(self, client, admin_token):
+        """Admin can delete a lecturer account, course assignment set to null."""
+        reg_resp = client.post("/auth/register",
+            headers=auth_header(admin_token),
+            json={
+                "email": "temp_lec@unilorin.edu.ng",
+                "password": "TempLecturer123!",
+                "full_name": "Temporary Lecturer",
+                "role": "lecturer"
+            }
+        )
+        assert reg_resp.status_code == 201
+        lec_id = reg_resp.json()["id"]
+
+        course_code = "TMP888"
+        c_resp = client.post("/admin/courses",
+            headers=auth_header(admin_token),
+            json={
+                "course_code": course_code,
+                "course_title": "Temporary Course",
+                "lecturer_id": lec_id
+            }
+        )
+        assert c_resp.status_code == 201
+
+        del_resp = client.delete(f"/admin/users/{lec_id}", headers=auth_header(admin_token))
+        assert del_resp.status_code == 204
+
+        courses_resp = client.get("/admin/courses", headers=auth_header(admin_token))
+        tmp_course = next((c for c in courses_resp.json() if c["course_code"] == course_code), None)
+        assert tmp_course is not None
+        assert tmp_course["lecturer_name"] == "Not Assigned"
