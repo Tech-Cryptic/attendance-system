@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.db.database import get_connection, release_connection
 from app.models.schemas import (
-    TokenCheckRequest, EnrollmentRequest, EnrollmentResponse
+    TokenCheckRequest, EnrollmentRequest, EnrollmentResponse, BehaviouralUpdateRequest
 )
 from app.qr.signing import sign_qr_payload
 
@@ -157,5 +157,67 @@ def enroll_student(req: EnrollmentRequest):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
+@router.put("/enroll/behavioural")
+def update_behavioural_profile(req: BehaviouralUpdateRequest):
+    import json
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        
+        # 1. Validate that student exists and token is linked/valid
+        cur.execute(
+            "SELECT course_code, matric_number, used FROM enrollment_tokens WHERE token = %s",
+            (req.token,)
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=403, detail="Invalid enrollment token")
+            
+        course_code, bound_matric, used = row
+        if bound_matric != req.matric_number:
+            raise HTTPException(status_code=403, detail="Token matric number mismatch")
+            
+        # 2. Update the student's behavioural profile
+        profile_json = json.dumps(req.behavioural_profile)
+        cur.execute(
+            "UPDATE students SET behavioural_profile = %s WHERE matric_number = %s",
+            (profile_json, req.matric_number)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Student not found")
+            
+        conn.commit()
+        cur.close()
+        return {"success": True, "message": "Behavioural profile updated successfully"}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
+@router.get("/students/{matric_number}/behavioural")
+def get_behavioural_profile(matric_number: str):
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT behavioural_profile FROM students WHERE matric_number = %s",
+            (matric_number,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        profile = row[0]
+        return {"matric_number": matric_number, "behavioural_profile": profile}
     finally:
         release_connection(conn)

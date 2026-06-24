@@ -234,25 +234,109 @@ export class TouchVectorCapturer {
     }
   }
 }
+}
+
+// ── Keystroke dynamics capture ────────────────────────────────
+export class KeystrokeCapturer {
+  constructor() {
+    this.keyEvents = []
+    this.isActive = false
+    this.startTime = null
+    this._keydownHandler = null
+    this._keyupHandler = null
+  }
+
+  start(inputElement) {
+    if (!inputElement) return
+    this.keyEvents = []
+    this.isActive = true
+    this.startTime = performance.now()
+
+    this._keydownHandler = (e) => {
+      if (!this.isActive) return
+      if (e.repeat) return // ignore repeated keys when held down
+      
+      this.keyEvents.push({
+        type: 'keydown',
+        key: e.key,
+        t: performance.now() - this.startTime
+      })
+    }
+
+    this._keyupHandler = (e) => {
+      if (!this.isActive) return
+      this.keyEvents.push({
+        type: 'keyup',
+        key: e.key,
+        t: performance.now() - this.startTime
+      })
+    }
+
+    inputElement.addEventListener('keydown', this._keydownHandler)
+    inputElement.addEventListener('keyup', this._keyupHandler)
+    this._input = inputElement
+  }
+
+  stop() {
+    this.isActive = false
+    if (this._input) {
+      this._input.removeEventListener('keydown', this._keydownHandler)
+      this._input.removeEventListener('keyup', this._keyupHandler)
+    }
+  }
+
+  extractFeatures() {
+    if (this.keyEvents.length < 4) return null
+
+    const keydowns = {}
+    const dwells = []
+    const flights = []
+    let lastKeyupTime = null
+
+    for (const ev of this.keyEvents) {
+      if (ev.type === 'keydown') {
+        keydowns[ev.key] = ev.t
+        if (lastKeyupTime !== null) {
+          flights.push(ev.t - lastKeyupTime)
+        }
+      } else if (ev.type === 'keyup') {
+        const downTime = keydowns[ev.key]
+        if (downTime !== undefined) {
+          dwells.push(ev.t - downTime)
+          delete keydowns[ev.key]
+        }
+        lastKeyupTime = ev.t
+      }
+    }
+
+    const meanDwell = dwells.length ? dwells.reduce((a, b) => a + b, 0) / dwells.length : 0
+    const meanFlight = flights.length ? flights.reduce((a, b) => a + b, 0) / flights.length : 0
+
+    return {
+      sampleCount: this.keyEvents.length,
+      dwells,
+      flights,
+      meanDwell,
+      meanFlight
+    }
+  }
+}
 
 // ── Combined Behavioural Profile Builder ──────────────────────
 
 /**
- * Build a compact behavioural profile from motion + touch data.
+ * Build a compact behavioural profile from motion + touch + keystroke data.
  * Stored in students.behavioural_profile (JSONB in PostgreSQL).
- *
- * During twin-disambiguation at attendance time, the incoming
- * behavioural features are compared against the stored profile
- * using a Euclidean distance in feature space.
  *
  * @returns {Object} serialisable behavioural profile
  */
-export function buildBehaviouralProfile(motionFeatures, touchFeatures) {
+export function buildBehaviouralProfile(motionFeatures, touchFeatures, keystrokeFeatures) {
   return {
     version:   '1.0',
     capturedAt: new Date().toISOString(),
     motion:    motionFeatures,
     touch:     touchFeatures,
+    keystroke: keystrokeFeatures,
   }
 }
 
@@ -261,12 +345,12 @@ export function buildBehaviouralProfile(motionFeatures, touchFeatures) {
  * Returns similarity score 0–1 (higher = more similar = same person).
  */
 export function compareBehaviouralProfiles(profileA, profileB) {
-  if (!profileA?.motion || !profileB?.motion) return 0.5  // neutral
+  if (!profileA || !profileB) return 0.5  // neutral
 
   const scores = []
 
   // Compare motion RMS
-  if (profileA.motion.overallRMS && profileB.motion.overallRMS) {
+  if (profileA.motion?.overallRMS && profileB.motion?.overallRMS) {
     const diff = Math.abs(profileA.motion.overallRMS - profileB.motion.overallRMS)
     const maxRMS = Math.max(profileA.motion.overallRMS, profileB.motion.overallRMS)
     scores.push(1 - Math.min(1, diff / (maxRMS + 0.001)))
@@ -277,6 +361,20 @@ export function compareBehaviouralProfiles(profileA, profileB) {
     const diff = Math.abs(profileA.touch.velocity.mean - profileB.touch.velocity.mean)
     const maxV = Math.max(profileA.touch.velocity.mean, profileB.touch.velocity.mean)
     scores.push(1 - Math.min(1, diff / (maxV + 0.001)))
+  }
+
+  // Compare keystroke mean dwell
+  if (profileA.keystroke?.meanDwell && profileB.keystroke?.meanDwell) {
+    const diff = Math.abs(profileA.keystroke.meanDwell - profileB.keystroke.meanDwell)
+    const maxD = Math.max(profileA.keystroke.meanDwell, profileB.keystroke.meanDwell)
+    scores.push(1 - Math.min(1, diff / (maxD + 0.001)))
+  }
+
+  // Compare keystroke mean flight
+  if (profileA.keystroke?.meanFlight && profileB.keystroke?.meanFlight) {
+    const diff = Math.abs(profileA.keystroke.meanFlight - profileB.keystroke.meanFlight)
+    const maxF = Math.max(profileA.keystroke.meanFlight, profileB.keystroke.meanFlight)
+    scores.push(1 - Math.min(1, diff / (maxF + 0.001)))
   }
 
   return scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0.5

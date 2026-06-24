@@ -42,3 +42,9 @@ class EnrollmentResponse(BaseModel):
     high_similarity_flag: bool
     qr_payload:           str
     qr_signature:         str
+
+
+class BehaviouralUpdateRequest(BaseModel):
+    matric_number: str
+    token: str
+    behavioural_profile: dict

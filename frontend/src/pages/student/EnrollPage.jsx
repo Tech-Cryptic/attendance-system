@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import FaceCamera from '../../components/FaceCamera'
 import NDPRConsent from '../../components/NDPRConsent'
@@ -6,6 +6,12 @@ import LivenessGate from '../../components/LivenessGate'
 import { averageEmbeddings } from '../../lib/faceai/detector'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
+import {
+  MotionCapturer,
+  TouchVectorCapturer,
+  KeystrokeCapturer,
+  buildBehaviouralProfile
+} from '../../lib/behavioural/motionCapture'
 
 const CAPTURE_FRAMES = 5    // number of frames to average for robust embedding
 const CAPTURE_INTERVAL_MS = 800  // wait 800ms between captures
@@ -51,6 +57,37 @@ export default function EnrollPage() {
 
   const faceCamRef = useRef(null)
   const lastDetectionRef = useRef(null)  // live reference to latest detection result
+
+  const [typedText, setTypedText] = useState('')
+  const traceCanvasRef = useRef(null)
+  const typingInputRef = useRef(null)
+  const motionCapturer = useRef(null)
+  const touchCapturer = useRef(null)
+  const keystrokeCapturer = useRef(null)
+
+  useEffect(() => {
+    if (step !== 5) return
+
+    motionCapturer.current = new MotionCapturer()
+    touchCapturer.current = new TouchVectorCapturer()
+    keystrokeCapturer.current = new KeystrokeCapturer()
+
+    motionCapturer.current.start().catch(console.error)
+
+    if (traceCanvasRef.current) {
+      touchCapturer.current.start(traceCanvasRef.current)
+    }
+
+    if (typingInputRef.current) {
+      keystrokeCapturer.current.start(typingInputRef.current)
+    }
+
+    return () => {
+      motionCapturer.current?.stop()
+      touchCapturer.current?.stop()
+      keystrokeCapturer.current?.stop()
+    }
+  }, [step])
 
   // Pre-fill token from URL param
   useEffect(() => {
@@ -192,10 +229,59 @@ export default function EnrollPage() {
         setQrDataURL(url)
       }
 
-      setStep(4)  // → Success
+      if (data.high_similarity_flag) {
+        setStep(5)  // → Behavioral Biometrics Capture
+      } else {
+        setStep(4)  // → Success
+      }
     } catch (err) {
       setSubmitError(err.message)
       setIsCapturing(false)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleBehaviouralSubmit() {
+    setSubmitting(true)
+    setSubmitError('')
+
+    try {
+      motionCapturer.current?.stop()
+      touchCapturer.current?.stop()
+      keystrokeCapturer.current?.stop()
+
+      const motionFeatures = motionCapturer.current?.extractFeatures()
+      const touchFeatures = touchCapturer.current?.extractFeatures()
+      const keystrokeFeatures = keystrokeCapturer.current?.extractFeatures()
+
+      if (!touchFeatures || !keystrokeFeatures) {
+        throw new Error('Please type your matric number fully and trace the pattern box to collect timing and gestures.')
+      }
+
+      const profile = buildBehaviouralProfile(motionFeatures, touchFeatures, keystrokeFeatures)
+
+      const res = await fetch(`${API_BASE}/enroll/behavioural`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          matric_number: matricNumber.trim(),
+          token: token.trim(),
+          behavioural_profile: profile
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? 'Failed to submit behavioral biometrics')
+
+      // Proceed to enrollment complete view
+      setStep(4)
+    } catch (err) {
+      setSubmitError(err.message)
+      // Restart capturers
+      motionCapturer.current?.start().catch(console.error)
+      if (traceCanvasRef.current) touchCapturer.current?.start(traceCanvasRef.current)
+      if (typingInputRef.current) keystrokeCapturer.current?.start(typingInputRef.current)
     } finally {
       setSubmitting(false)
     }
@@ -444,6 +530,71 @@ export default function EnrollPage() {
 
             <button id="btn-enroll-done" className="btn btn-primary btn-full" onClick={() => navigate('/login')}>
               Proceed to Login
+            </button>
+          </div>
+        )}
+
+        {/* ── STEP 6: Behavioral Biometrics Capture ─── */}
+        {step === 5 && (
+          <div className="card fade-in-up" style={{ padding: '24px' }}>
+            <h3 style={{ marginBottom: '8px' }}>⚠️ Behavioral Verification Setup</h3>
+            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
+              Your face embedding matches a look-alike student. We need to collect touch, device motion, and typing dynamics to secure your identity.
+            </p>
+
+            {submitError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{submitError}</div>}
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>
+                1. Trace a circle inside this target box:
+              </label>
+              <div
+                ref={traceCanvasRef}
+                style={{
+                  height: 120,
+                  border: '2px dashed var(--brand-mid)',
+                  borderRadius: 12,
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: 'rgba(255,255,255,0.02)',
+                  userSelect: 'none',
+                  touchAction: 'none',
+                  cursor: 'crosshair',
+                }}
+              >
+                <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
+                  Draw a circle or path here 🔄
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label className="form-label" htmlFor="behavioural-typing">
+                2. Type your matriculation number ({matricNumber}):
+              </label>
+              <input
+                ref={typingInputRef}
+                id="behavioural-typing"
+                type="text"
+                className="form-input font-mono"
+                placeholder="Type your matriculation number here..."
+                value={typedText}
+                onChange={e => setTypedText(e.target.value)}
+                required
+                spellCheck="false"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <button
+              id="btn-behavioural-submit"
+              className="btn btn-primary btn-full"
+              disabled={submitting}
+              onClick={handleBehaviouralSubmit}
+            >
+              {submitting ? <><div className="spinner" /> Saving…</> : 'Register Behavioral Biometrics →'}
             </button>
           </div>
         )}

@@ -456,7 +456,7 @@ def get_course_embeddings(
         cur = conn.cursor()
         cur.execute(
             """SELECT s.matric_number, s.full_name, s.embedding, s.iris_embedding,
-                      s.high_similarity_flag
+                      s.high_similarity_flag, s.behavioural_profile
                FROM students s
                JOIN course_enrollments ce ON ce.matric_number = s.matric_number
                WHERE ce.course_code = %s""",
@@ -474,6 +474,7 @@ def get_course_embeddings(
                     "embedding":           r[2],
                     "iris_embedding":      r[3],
                     "high_similarity_flag": r[4],
+                    "behavioural_profile":  r[5],
                 }
                 for r in rows
             ]

@@ -30,3 +30,14 @@ frontend/.env.*.local
 .env
 .env.local
 .env.production
+
+# ── Documents & Images (Dissertation files) ───────────────
+*.docx
+*.pdf
+*.png
+*.webp
+*.zip
+*.txt
+*.yaml
+*.sql
+

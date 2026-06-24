@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode'
@@ -8,6 +8,13 @@ import { matchEmbedding, averageEmbeddings } from '../../lib/faceai/detector'
 import { queueAttendance, onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
 import db from '../../lib/db/schema'
 import { API_BASE } from '../../lib/api'
+import {
+  MotionCapturer,
+  TouchVectorCapturer,
+  KeystrokeCapturer,
+  buildBehaviouralProfile,
+  compareBehaviouralProfiles
+} from '../../lib/behavioural/motionCapture'
 
 const CAPTURE_FRAMES = 5
 
@@ -43,6 +50,39 @@ export default function AttendancePage() {
 
   const faceCamRef       = useRef(null)
   const lastDetectionRef = useRef(null)
+
+  // Step 5 — Behavioral verification states & refs
+  const [tempCheckinPayload, setTempCheckinPayload] = useState(null)
+  const [typedText, setTypedText] = useState('')
+  const traceCanvasRef = useRef(null)
+  const typingInputRef = useRef(null)
+  const motionCapturer = useRef(null)
+  const touchCapturer = useRef(null)
+  const keystrokeCapturer = useRef(null)
+
+  useEffect(() => {
+    if (step !== 5) return
+
+    motionCapturer.current = new MotionCapturer()
+    touchCapturer.current = new TouchVectorCapturer()
+    keystrokeCapturer.current = new KeystrokeCapturer()
+
+    motionCapturer.current.start().catch(console.error)
+
+    if (traceCanvasRef.current) {
+      touchCapturer.current.start(traceCanvasRef.current)
+    }
+
+    if (typingInputRef.current) {
+      keystrokeCapturer.current.start(typingInputRef.current)
+    }
+
+    return () => {
+      motionCapturer.current?.stop()
+      touchCapturer.current?.stop()
+      keystrokeCapturer.current?.stop()
+    }
+  }, [step])
 
   // ── Network status ─────────────────────────────────────────
   useEffect(() => {
@@ -191,7 +231,9 @@ export default function AttendancePage() {
         const rppgScore    = rppgStatus?.score       ?? null
         const irisDistance = lastDetectionRef.current?.irisDescriptor ? 0 : null
 
-        await queueAttendance({
+        setMatchResult({ match, similarity, distance })
+
+        const payload = {
           session_id:          sessionData.session_id,
           qr_payload:          sessionData.qr_payload,
           qr_signature:        sessionData.qr_signature,
@@ -200,11 +242,16 @@ export default function AttendancePage() {
           liveness_rppg_score: rppgScore,
           iris_distance:       irisDistance,
           method:              'face',
-        })
+        }
 
-        setMatchResult({ match, similarity, distance })
-        setPendingCount(await getPendingCount())
-        setStep(3)  // → Done
+        if (match.high_similarity_flag) {
+          setTempCheckinPayload(payload)
+          setStep(5)  // → Behavioral Verification UI
+        } else {
+          await queueAttendance(payload)
+          setPendingCount(await getPendingCount())
+          setStep(3)  // → Done
+        }
 
       } catch (err) {
         setMatchError(err.message)
@@ -215,6 +262,66 @@ export default function AttendancePage() {
 
     captureAndMatch()
   }, [step])
+
+  async function handleBehaviouralVerify() {
+    setIsProcessing(true)
+    setMatchError('')
+
+    try {
+      motionCapturer.current?.stop()
+      touchCapturer.current?.stop()
+      keystrokeCapturer.current?.stop()
+
+      const motionFeatures = motionCapturer.current?.extractFeatures()
+      const touchFeatures = touchCapturer.current?.extractFeatures()
+      const keystrokeFeatures = keystrokeCapturer.current?.extractFeatures()
+
+      if (!touchFeatures || !keystrokeFeatures) {
+        throw new Error('Please type your matric number fully and trace the pattern box to verify.')
+      }
+
+      const capturedProfile = buildBehaviouralProfile(motionFeatures, touchFeatures, keystrokeFeatures)
+
+      // Fetch reference profile offline-first
+      let referenceProfile = matchResult.match.behavioural_profile
+
+      if (!referenceProfile) {
+        if (navigator.onLine) {
+          const res = await fetch(`${API_BASE}/students/${matchResult.match.matric_number}/behavioural`)
+          if (res.ok) {
+            const data = await res.json()
+            referenceProfile = data.behavioural_profile
+          }
+        }
+      }
+
+      if (!referenceProfile) {
+        throw new Error('No reference behavioral profile found. Please register it at enrollment or contact support.')
+      }
+
+      const score = compareBehaviouralProfiles(capturedProfile, referenceProfile)
+
+      if (score < 0.65) {
+        throw new Error(`Behavioral verification failed (similarity: ${(score * 100).toFixed(1)}%). Try again.`)
+      }
+
+      await queueAttendance({
+        ...tempCheckinPayload,
+        method: 'face_disambiguated'
+      })
+
+      setPendingCount(await getPendingCount())
+      setStep(3) // → Done
+    } catch (err) {
+      setMatchError(err.message)
+      // Restart capturers
+      motionCapturer.current?.start().catch(console.error)
+      if (traceCanvasRef.current) touchCapturer.current?.start(traceCanvasRef.current)
+      if (typingInputRef.current) keystrokeCapturer.current?.start(typingInputRef.current)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   // ── Load course embeddings (offline-first) ─────────────────
   async function loadCourseEmbeddings(courseCode) {
@@ -243,6 +350,7 @@ export default function AttendancePage() {
         embedding:     e.embedding,
         iris_embedding:e.iris_embedding,
         high_similarity_flag: e.high_similarity_flag,
+        behavioural_profile: e.behavioural_profile,
         cached_at:     Date.now(),
       }))
       await db.biometricStore.bulkPut(records)
@@ -264,6 +372,8 @@ export default function AttendancePage() {
     setIsProcessing(false)
     setEmbeddings([])
     setScanError('')
+    setTempCheckinPayload(null)
+    setTypedText('')
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -459,6 +569,79 @@ export default function AttendancePage() {
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
               <button className="btn btn-ghost" onClick={reset}>Mark Another</button>
               <Link to="/student" className="btn btn-primary">Back to Dashboard</Link>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 5: Behavioral Verification ── */}
+        {step === 5 && matchResult && (
+          <div className="card fade-in-up" style={{ padding: '24px' }}>
+            <h3 style={{ marginBottom: '8px' }}>⚠️ Behavioral Verification Required</h3>
+            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
+              We detected look-alike matches. Please trace a circle inside the target box and type your matriculation number below to verify your identity.
+            </p>
+
+            {matchError && (
+              <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
+                {matchError}
+              </div>
+            )}
+
+            <div className="form-group" style={{ marginBottom: '16px' }}>
+              <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>
+                1. Trace a circle inside this target box:
+              </label>
+              <div
+                ref={traceCanvasRef}
+                style={{
+                  height: 120,
+                  border: '2px dashed var(--brand-mid)',
+                  borderRadius: 12,
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: 'rgba(255,255,255,0.02)',
+                  userSelect: 'none',
+                  touchAction: 'none',
+                  cursor: 'crosshair',
+                }}
+              >
+                <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
+                  Draw a circle or path here 🔄
+                </span>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label className="form-label" htmlFor="behavioural-typing">
+                2. Type your matriculation number ({matchResult.match.matric_number}):
+              </label>
+              <input
+                ref={typingInputRef}
+                id="behavioural-typing"
+                type="text"
+                className="form-input font-mono"
+                placeholder="Type your matric number here..."
+                value={typedText}
+                onChange={e => setTypedText(e.target.value)}
+                required
+                spellCheck="false"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button className="btn btn-ghost" onClick={reset}>Cancel</button>
+              <button
+                id="btn-behavioural-verify"
+                className="btn btn-primary"
+                style={{ flex: 1 }}
+                disabled={isProcessing}
+                onClick={handleBehaviouralVerify}
+              >
+                {isProcessing ? <><div className="spinner" /> Verifying…</> : 'Verify Identity ✓'}
+              </button>
             </div>
           </div>
         )}
