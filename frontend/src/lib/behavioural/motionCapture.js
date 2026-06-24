@@ -234,7 +234,6 @@ export class TouchVectorCapturer {
     }
   }
 }
-}
 
 // ── Keystroke dynamics capture ────────────────────────────────
 export class KeystrokeCapturer {
