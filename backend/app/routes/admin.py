@@ -52,10 +52,12 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
         cur.execute(
             """SELECT c.course_code, c.course_title,
                       c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged,
+                      u.full_name as lecturer_name,
                       COUNT(DISTINCT ce.matric_number) as enrolled_count
                FROM courses c
+               LEFT JOIN users u ON u.id = c.lecturer_id
                LEFT JOIN course_enrollments ce ON ce.course_code = c.course_code
-               GROUP BY c.course_code, c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged
+               GROUP BY c.course_code, c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged, u.full_name
                ORDER BY c.course_code"""
         )
         rows = cur.fetchall()
@@ -67,7 +69,8 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
                 "expected_count":          r[2],
                 "enrollment_link_token":   r[3],
                 "over_enrollment_flagged": r[4],
-                "enrolled_count":          r[5],
+                "lecturer_name":           r[5] if r[5] else "Not Assigned",
+                "enrolled_count":          r[6],
             }
             for r in rows
         ]
@@ -78,6 +81,7 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
 class CourseCreate(BaseModel):
     course_code:    str
     course_title:   str
+    lecturer_id:    int | None = None
     expected_count: int | None = None
     matric_list:    list[str] = []     # official matric numbers for this course
 
@@ -102,14 +106,15 @@ def create_course(
 
         cur.execute(
             """INSERT INTO courses
-               (course_code, course_title, expected_count, matric_list,
+               (course_code, course_title, lecturer_id, expected_count, matric_list,
                 enrollment_link_token, enrollment_link_expires_at)
-               VALUES (%s, %s, %s, %s, %s, %s)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
                ON CONFLICT (course_code) DO NOTHING
                RETURNING course_code""",
             (
                 course.course_code.strip().upper(),
                 course.course_title.strip(),
+                course.lecturer_id,
                 course.expected_count,
                 matric_arr,
                 link_token,
@@ -126,6 +131,7 @@ def create_course(
         return {
             "course_code":      course.course_code.strip().upper(),
             "course_title":     course.course_title.strip(),
+            "lecturer_id":      course.lecturer_id,
             "expected_count":   course.expected_count,
             "enrolled_count":   0,
             "enrollment_link_token": link_token,

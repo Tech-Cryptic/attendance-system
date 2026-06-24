@@ -19,6 +19,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [stats,    setStats]    = useState(null)
   const [students, setStudents] = useState([])
   const [courses,  setCourses]  = useState([])
+  const [lecturers,setLecturers] = useState([])
   const [conflicts,setConflicts]= useState([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState('')
@@ -30,7 +31,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [newToken,     setNewToken]     = useState('')
 
   // ── Course creation form ────────────────────────────────────
-  const [courseForm,    setCourseForm]    = useState({ course_code: '', course_title: '', expected_count: '', matric_list: '' })
+  const [courseForm,    setCourseForm]    = useState({ course_code: '', course_title: '', expected_count: '', matric_list: '', lecturer_id: '' })
   const [courseCreating,setCourseCreating]= useState(false)
   const [courseMsg,     setCourseMsg]     = useState('')
   const [newCourseLink, setNewCourseLink] = useState('')   // enrollment URL from newly created course
@@ -48,16 +49,19 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       setLoading(true)
       setError('')
       try {
-        const [studRes, crsRes] = await Promise.all([
+        const [studRes, crsRes, lecRes] = await Promise.all([
           fetch(`${API_BASE}/admin/students`, { headers: authHeaders(token) }),
           fetch(`${API_BASE}/admin/courses`,  { headers: authHeaders(token) }),
+          fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) }),
         ])
         const stud = studRes.ok ? await studRes.json() : []
         const crs  = crsRes.ok  ? await crsRes.json()  : []
+        const lec  = lecRes.ok  ? await lecRes.json()  : []
         const studArr = Array.isArray(stud) ? stud : stud.students ?? []
         const crsArr  = Array.isArray(crs)  ? crs  : crs.courses  ?? []
         setStudents(studArr)
         setCourses(crsArr)
+        setLecturers(Array.isArray(lec) ? lec : [])
         const flagged = studArr.filter(s => s.high_similarity_flag)
         setConflicts(flagged)
         setStats({ students: studArr.length, courses: crsArr.length, conflicts: flagged.length })
@@ -85,6 +89,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
         body: JSON.stringify({
           course_code:    courseForm.course_code.trim().toUpperCase(),
           course_title:   courseForm.course_title.trim(),
+          lecturer_id:    courseForm.lecturer_id ? parseInt(courseForm.lecturer_id) : null,
           expected_count: courseForm.expected_count ? parseInt(courseForm.expected_count) : null,
           matric_list:    matricList,
         })
@@ -94,7 +99,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       setCourseMsg(`✅ Course "${data.course_code}" created. Share the enrollment link below.`)
       setNewCourseLink(data.enrollment_url)
       setCourses(prev => [...prev, data])
-      setCourseForm({ course_code: '', course_title: '', expected_count: '', matric_list: '' })
+      setCourseForm({ course_code: '', course_title: '', expected_count: '', matric_list: '', lecturer_id: '' })
     } catch { setCourseMsg('Network error.') }
     finally  { setCourseCreating(false) }
   }
@@ -210,17 +215,27 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
                 <form onSubmit={handleCreateCourse} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <div className="form-group" style={{ flex: 1, minWidth: 140 }}>
+                    <div className="form-group" style={{ flex: 1, minWidth: 120 }}>
                       <label className="form-label">Course Code</label>
                       <input className="form-input font-mono" placeholder="e.g. CSC401" value={courseForm.course_code}
                         onChange={e => setCourseForm(p => ({...p, course_code: e.target.value}))} required />
                     </div>
-                    <div className="form-group" style={{ flex: 2, minWidth: 200 }}>
+                    <div className="form-group" style={{ flex: 2, minWidth: 180 }}>
                       <label className="form-label">Course Title</label>
                       <input className="form-input" placeholder="e.g. Computer Networks" value={courseForm.course_title}
                         onChange={e => setCourseForm(p => ({...p, course_title: e.target.value}))} required />
                     </div>
-                    <div className="form-group" style={{ minWidth: 120 }}>
+                    <div className="form-group" style={{ flex: 1.5, minWidth: 160 }}>
+                      <label className="form-label">Assign Lecturer</label>
+                      <select className="form-input" value={courseForm.lecturer_id}
+                        onChange={e => setCourseForm(p => ({...p, lecturer_id: e.target.value}))}>
+                        <option value="">-- Select Lecturer --</option>
+                        {lecturers.map(l => (
+                          <option key={l.id} value={l.id}>{l.full_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ minWidth: 100 }}>
                       <label className="form-label">Expected Students</label>
                       <input className="form-input" type="number" min="1" placeholder="e.g. 120"
                         value={courseForm.expected_count}
@@ -260,14 +275,15 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                   <h4 style={{ margin: 0 }}>All Courses ({courses.length})</h4>
                 </div>
                 <table className="data-table">
-                  <thead><tr><th>Code</th><th>Title</th><th>Enrolled</th><th>Expected</th><th>Status</th><th>Enrollment Link</th></tr></thead>
+                  <thead><tr><th>Code</th><th>Title</th><th>Lecturer</th><th>Enrolled</th><th>Expected</th><th>Status</th><th>Enrollment Link</th></tr></thead>
                   <tbody>
                     {courses.length === 0
-                      ? <tr><td colSpan={6} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
+                      ? <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
                       : courses.map(c => (
                           <tr key={c.course_code}>
                             <td><span className="badge badge-brand font-mono">{c.course_code}</span></td>
                             <td>{c.course_title}</td>
+                            <td style={{ color: 'var(--text-muted)' }}>{c.lecturer_name ?? '—'}</td>
                             <td style={{ fontWeight: 600 }}>{c.enrolled_count ?? '—'}</td>
                             <td style={{ color: 'var(--text-muted)' }}>{c.expected_count ?? '—'}</td>
                             <td>
