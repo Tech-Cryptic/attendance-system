@@ -10,7 +10,7 @@ echo "========================================"
 
 # 1. Apply schema and seed database
 echo "[1/2] Checking schema and seeding database..."
-python seed.py || echo "WARNING: Database setup failed"
+python seed.py
 echo "      Database setup OK"
 
 # 2. Start the FastAPI server
