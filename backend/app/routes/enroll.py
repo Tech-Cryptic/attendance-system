@@ -1,12 +1,10 @@
-import secrets
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException
 
 from app.db.database import get_connection, release_connection
 from app.models.schemas import (
-    CourseCreate, TokenCreateRequest, TokenCheckRequest, TokenOut,
-    EnrollmentRequest, EnrollmentResponse
+    TokenCheckRequest, EnrollmentRequest, EnrollmentResponse
 )
 from app.qr.signing import sign_qr_payload
 
@@ -19,51 +17,6 @@ SIMILARITY_FLAG_THRESHOLD = 0.50
 
 def euclidean_distance(emb1: list[float], emb2: list[float]) -> float:
     return float(np.linalg.norm(np.array(emb1) - np.array(emb2)))
-
-
-# ── Course Management ─────────────────────────────────────────
-
-@router.post("/admin/courses")
-def create_course(course: CourseCreate):
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO courses (course_code, course_title) VALUES (%s, %s) "
-            "ON CONFLICT (course_code) DO NOTHING",
-            (course.course_code, course.course_title)
-        )
-        conn.commit()
-        cur.close()
-        return {"course_code": course.course_code, "course_title": course.course_title}
-    finally:
-        release_connection(conn)
-
-
-# ── Token Management ──────────────────────────────────────────
-
-@router.post("/admin/tokens", response_model=TokenOut)
-def create_token(req: TokenCreateRequest):
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT course_code FROM courses WHERE course_code = %s", (req.course_code,))
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="Course not found")
-
-        token = secrets.token_urlsafe(24)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=req.expires_in_hours)
-
-        cur.execute(
-            "INSERT INTO enrollment_tokens (token, course_code, matric_number, expires_at) "
-            "VALUES (%s, %s, %s, %s)",
-            (token, req.course_code, req.matric_number, expires_at)
-        )
-        conn.commit()
-        cur.close()
-        return TokenOut(token=token, course_code=req.course_code, expires_at=expires_at)
-    finally:
-        release_connection(conn)
 
 
 @router.post("/enroll/check-token")

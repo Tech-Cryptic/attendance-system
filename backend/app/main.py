@@ -42,22 +42,8 @@ app.include_router(admin.lecturer_router)
 @app.get("/health")
 def health_check():
     try:
-        from app.db.database import get_connection, release_connection
-        conn = get_connection()
-        try:
-            cur = conn.cursor()
-            cur.execute("SELECT course_code, course_title, expected_count, enrollment_link_token FROM courses")
-            rows = cur.fetchall()
-            cur.close()
-            courses_list = [
-                {"code": r[0], "title": r[1], "expected": r[2], "token": r[3]}
-                for r in rows
-            ]
-        finally:
-            release_connection(conn)
-            
         db_version = test_connection()
-        return {"status": "ok", "database": db_version, "courses_raw": courses_list}
+        return {"status": "ok", "database": db_version}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 

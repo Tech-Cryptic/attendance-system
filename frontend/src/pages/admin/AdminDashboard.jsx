@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from '../../components/Sidebar'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE } from '../../lib/api'
@@ -113,6 +113,23 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       setTokenMsg(`✅ Token issued for ${tokenForm.course_code}`)
     } catch { setTokenMsg('Network error.') }
     finally  { setTokenCreating(false) }
+  }
+
+  async function handleGenerateLink(courseCode) {
+    try {
+      const res = await fetch(`${API_BASE}/admin/courses/${courseCode}/generate-link`, {
+        method: 'POST',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setCourses(prev => prev.map(c => c.course_code === courseCode ? { ...c, enrollment_link_token: data.enrollment_link_token } : c))
+      } else {
+        alert(`Error generating link: ${data.detail}`)
+      }
+    } catch {
+      alert('Network error generating link.')
+    }
   }
 
   const TAB_MAP = [
@@ -268,7 +285,15 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                                 >
                                   📋 Copy Link
                                 </button>
-                              ) : '—'}
+                              ) : (
+                                <button
+                                  className="btn btn-sm btn-ghost"
+                                  style={{ fontSize: 11, color: 'var(--brand-mid)', fontWeight: 600 }}
+                                  onClick={() => handleGenerateLink(c.course_code)}
+                                >
+                                  🔄 Generate Link
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))
