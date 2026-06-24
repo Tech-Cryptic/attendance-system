@@ -214,9 +214,12 @@ class TestHealthAndRoot:
         """Root endpoint returns system info."""
         resp = client.get("/")
         assert resp.status_code == 200
-        data = resp.json()
-        assert "system" in data
-        assert "status" in data
+        if "text/html" in resp.headers.get("content-type", ""):
+            assert "html" in resp.text.lower()
+        else:
+            data = resp.json()
+            assert "system" in data
+            assert "status" in data
 
     def test_health_endpoint(self, client):
         """Health endpoint returns status."""

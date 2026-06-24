@@ -43,6 +43,24 @@ class TestLogin:
         assert "full_name" in data
         assert data["role"] == "admin"
 
+    def test_login_auto_provision_lecturer(self, client):
+        """Typing lecturer1-50 with Lecturer1234! automatically provisions and logs in."""
+        resp = client.post("/auth/login", json={
+            "email": "lecturer42@unilorin.edu.ng",
+            "password": "Lecturer1234!"
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["role"] == "lecturer"
+        assert data["full_name"] == "Lecturer 42"
+        
+        # Subsequent login should also succeed without error
+        resp2 = client.post("/auth/login", json={
+            "email": "lecturer42@unilorin.edu.ng",
+            "password": "Lecturer1234!"
+        })
+        assert resp2.status_code == 200
+
 
 class TestRegister:
     def test_register_requires_admin(self, client, student_token):

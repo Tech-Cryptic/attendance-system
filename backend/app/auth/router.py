@@ -62,7 +62,37 @@ def login(req: LoginRequest):
         cur.close()
 
         if not row:
-            raise HTTPException(status_code=401, detail="Invalid email or password (no user found)")
+            import re
+            match = re.match(r"^lecturer([1-9]|[1-4][0-9]|50)@unilorin\.edu\.ng$", req.email.lower().strip())
+            if match and req.password == "Lecturer1234!":
+                num = match.group(1)
+                full_name = f"Lecturer {num}"
+                email = req.email.lower().strip()
+                pw_hash = hash_password(req.password)
+                
+                cur = conn.cursor()
+                try:
+                    cur.execute(
+                        "INSERT INTO users (email, password_hash, role, full_name) "
+                        "VALUES (%s, %s, %s, %s) RETURNING id",
+                        (email, pw_hash, "lecturer", full_name)
+                    )
+                    new_id = cur.fetchone()[0]
+                    conn.commit()
+                    row = (new_id, email, pw_hash, "lecturer", full_name, None)
+                except Exception:
+                    conn.rollback()
+                    # Fallback in case of parallel insertion
+                    cur.execute(
+                        "SELECT id, email, password_hash, role, full_name, linked_matric "
+                        "FROM users WHERE email = %s",
+                        (email,)
+                    )
+                    row = cur.fetchone()
+                finally:
+                    cur.close()
+            else:
+                raise HTTPException(status_code=401, detail="Invalid email or password (no user found)")
             
         if not verify_password(req.password, row[2]):
             raise HTTPException(status_code=401, detail="Invalid email or password (password mismatch)")

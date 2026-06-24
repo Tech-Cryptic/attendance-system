@@ -37,6 +37,11 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [newCourseLink, setNewCourseLink] = useState('')   // enrollment URL from newly created course
   const [copiedLink,    setCopiedLink]    = useState(false)
 
+  // ── User creation form ──────────────────────────────────────
+  const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'lecturer', linked_matric: '' })
+  const [userCreating, setUserCreating] = useState(false)
+  const [userMsg, setUserMsg] = useState('')
+
   function copyLink(url) {
     navigator.clipboard.writeText(window.location.origin + url)
       .then(() => { setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000) })
@@ -137,9 +142,43 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
     }
   }
 
+  async function handleCreateUser(e) {
+    e.preventDefault()
+    setUserCreating(true); setUserMsg('')
+    try {
+      const payload = {
+        email: userForm.email.trim(),
+        password: userForm.password,
+        full_name: userForm.full_name.trim(),
+        role: userForm.role,
+        linked_matric: userForm.role === 'student' ? userForm.linked_matric.trim() : null
+      }
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setUserMsg(`Error: ${data.detail}`)
+        return
+      }
+      setUserMsg(`✅ ${userForm.role.toUpperCase()} "${userForm.full_name}" registered successfully!`)
+      setUserForm({ email: '', password: '', full_name: '', role: 'lecturer', linked_matric: '' })
+      if (userForm.role === 'lecturer') {
+        const lecRes = await fetch(`${API_BASE}/admin/lecturers`, { headers: authHeaders(token) })
+        if (lecRes.ok) setLecturers(await lecRes.json())
+      }
+    } catch {
+      setUserMsg('Network error registering user.')
+    } finally {
+      setUserCreating(false)
+    }
+  }
+
   const TAB_MAP = [
     ['overview','Overview'], ['courses','Courses'], ['tokens','Issue Token'],
-    ['students','Students'], ['conflicts','Conflicts'], ['export','Export'],
+    ['students','Students'], ['conflicts','Conflicts'], ['users','Create Users'], ['export','Export'],
   ]
 
   return (
@@ -179,6 +218,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                 <button className="btn btn-ghost" onClick={() => setTab('courses')}>➕ Create Course</button>
                 <button className="btn btn-ghost" onClick={() => setTab('tokens')}>🔑 Issue Token</button>
                 <button className="btn btn-ghost" onClick={() => setTab('conflicts')}>🚩 View Conflicts</button>
+                <button className="btn btn-ghost" onClick={() => setTab('users')}>👤 Create Users</button>
                 <button className="btn btn-ghost" onClick={() => setTab('export')}>📥 Export Data</button>
               </div>
             </div>
@@ -417,6 +457,59 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                   </tbody>
                 </table>
               )}
+            </div>
+          )}
+
+          {/* ── Create Users ── */}
+          {tab === 'users' && (
+            <div className="card">
+              <h4 style={{ marginBottom: '4px' }}>Register User Account</h4>
+              <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
+                Create login accounts for lecturers or students. Student accounts must link to a valid matric number.
+              </p>
+              {userMsg && <div className={`alert ${userMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
+              
+              <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
+                    <label className="form-label">Full Name</label>
+                    <input className="form-input" placeholder="e.g. Dr. John Doe or Jane Smith" value={userForm.full_name}
+                      onChange={e => setUserForm(p => ({...p, full_name: e.target.value}))} required />
+                  </div>
+                  <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
+                    <label className="form-label">Email Address</label>
+                    <input className="form-input" type="email" placeholder="user@unilorin.edu.ng" value={userForm.email}
+                      onChange={e => setUserForm(p => ({...p, email: e.target.value}))} required />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                    <label className="form-label">Role</label>
+                    <select className="form-input" value={userForm.role}
+                      onChange={e => setUserForm(p => ({...p, role: e.target.value}))}>
+                      <option value="lecturer">Lecturer</option>
+                      <option value="student">Student</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                    <label className="form-label">Password <span style={{ color:'var(--text-muted)', fontWeight:400 }}>(min 8 chars)</span></label>
+                    <input className="form-input" type="password" placeholder="••••••••" minLength={8} value={userForm.password}
+                      onChange={e => setUserForm(p => ({...p, password: e.target.value}))} required />
+                  </div>
+                  {userForm.role === 'student' && (
+                    <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
+                      <label className="form-label">Linked Matric Number</label>
+                      <input className="form-input font-mono" placeholder="e.g. 22/01DL068" value={userForm.linked_matric}
+                        onChange={e => setUserForm(p => ({...p, linked_matric: e.target.value}))} required />
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="btn btn-primary" disabled={userCreating} style={{ alignSelf: 'flex-start' }}>
+                  {userCreating ? 'Registering…' : '👤 Register User'}
+                </button>
+              </form>
             </div>
           )}
 
