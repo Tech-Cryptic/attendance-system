@@ -51,15 +51,26 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
         cur = conn.cursor()
         cur.execute(
             """SELECT c.course_code, c.course_title,
+                      c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged,
                       COUNT(DISTINCT ce.matric_number) as enrolled_count
                FROM courses c
                LEFT JOIN course_enrollments ce ON ce.course_code = c.course_code
-               GROUP BY c.course_code
+               GROUP BY c.course_code, c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged
                ORDER BY c.course_code"""
         )
         rows = cur.fetchall()
         cur.close()
-        return [{"course_code": r[0], "course_title": r[1], "enrolled_count": r[2]} for r in rows]
+        return [
+            {
+                "course_code":             r[0],
+                "course_title":            r[1],
+                "expected_count":          r[2],
+                "enrollment_link_token":   r[3],
+                "over_enrollment_flagged": r[4],
+                "enrolled_count":          r[5],
+            }
+            for r in rows
+        ]
     finally:
         release_connection(conn)
 
