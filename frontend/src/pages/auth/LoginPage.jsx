@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext'
 
 function FaceIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
       <circle cx="12" cy="13" r="3"/>
       <path d="M9.5 10.5c0-1.38 1.12-2.5 2.5-2.5"/>
@@ -74,9 +74,11 @@ export default function LoginPage() {
         </div>
 
         {/* Heading */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>Welcome back</h1>
-          <p className="text-secondary">Sign in to FaceAttend — Unilorin Biometric Attendance</p>
+        <div style={{ marginBottom: 'var(--sp-8)' }}>
+          <h1 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--sp-1)' }}>Sign in to FaceAttend</h1>
+          <p className="text-secondary" style={{ fontSize: 'var(--text-sm)' }}>
+            Unilorin biometric attendance — University of Ilorin
+          </p>
         </div>
 
         {/* Error */}

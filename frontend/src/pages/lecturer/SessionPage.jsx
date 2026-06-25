@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
@@ -198,7 +198,7 @@ export default function SessionPage() {
                   step={5}
                   value={duration}
                   onChange={e => setDuration(Number(e.target.value))}
-                  style={{ width: '100%', accentColor: 'var(--brand-mid)', cursor: 'pointer', marginTop: '8px' }}
+                  style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer', marginTop: '8px' }}
                 />
 
                 {/* Tick labels */}
@@ -236,7 +236,7 @@ export default function SessionPage() {
                 </div>
 
                 {/* Policy note */}
-                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'rgba(79,70,229,0.06)', borderRadius: '8px', border: '1px solid var(--border-brand)' }}>
+                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--accent-muted)', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
                   <p className="text-xs text-muted" style={{ margin: 0 }}>
                     📋 <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
                   </p>
@@ -261,7 +261,7 @@ export default function SessionPage() {
           <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
             {/* Session header */}
-            <div className="card" style={{ background: isExpired ? 'rgba(239,68,68,0.08)' : 'linear-gradient(135deg,rgba(79,70,229,0.12),rgba(6,182,212,0.06))', borderColor: isExpired ? 'var(--danger)' : 'var(--border-brand)' }}>
+            <div className="card" style={{ background: isExpired ? 'var(--danger-bg)' : 'var(--bg-elevated)', borderColor: isExpired ? 'var(--danger-border)' : 'var(--border-default)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <div className="badge badge-brand" style={{ marginBottom: '6px' }}>
@@ -279,8 +279,7 @@ export default function SessionPage() {
                   {/* Timer */}
                   <div style={{
                     fontFamily: 'var(--font-mono)', fontSize: '28px', fontWeight: 800,
-                    color: (timeLeft ?? 999) < 60 ? 'var(--danger)' : 'var(--brand-mid)',
-                    textShadow: '0 0 20px currentColor',
+                    color: (timeLeft ?? 999) < 60 ? 'var(--danger)' : 'var(--accent)',
                     transition: 'color 0.5s',
                   }}>
                     {formatTime(timeLeft)}
@@ -307,7 +306,7 @@ export default function SessionPage() {
                 Project or display this QR code. Students scan it with their FaceAttend app.
               </p>
               {qrDataURL ? (
-                <div style={{ display: 'inline-block', padding: '16px', background: '#fff', borderRadius: '16px', boxShadow: '0 0 40px rgba(79,70,229,0.2)' }}>
+                <div className="qr-box">
                   <img src={qrDataURL} alt="Session QR code" width={320} height={320} />
                 </div>
               ) : (
@@ -333,31 +332,27 @@ export default function SessionPage() {
             {/* ── Batch Scan — Primary attendance method ── */}
             {session.active && !isExpired && (
               <div className="card" style={{
-                background: 'linear-gradient(135deg, rgba(124,58,237,0.15), rgba(79,70,229,0.08))',
-                borderColor: 'rgba(124,58,237,0.4)',
-                padding: '20px',
+                background: 'var(--accent-muted)',
+                borderColor: 'var(--accent-border)',
+                padding: 'var(--sp-5)',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: '0 0 4px', color: '#a78bfa' }}>
-                      🎯 Batch Face Scan
+                    <h4 style={{ margin: '0 0 var(--sp-1)', color: 'var(--accent)' }}>
+                      Batch face scan
                     </h4>
-                    <p className="text-sm text-muted" style={{ margin: 0 }}>
-                      Point your camera at groups of up to 15 students. The system auto-detects
-                      and matches enrolled students simultaneously.
+                    <p className="text-sm" style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                      Point your camera at groups of up to 15 students. The system detects
+                      and matches enrolled faces simultaneously.
                     </p>
                   </div>
                   <a
                     id="btn-batch-scan"
                     href={`/batch-scan/${session.session_id}/${session.course_code}`}
                     className="btn btn-primary"
-                    style={{
-                      background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-                      whiteSpace: 'nowrap',
-                      fontWeight: 700,
-                    }}
+                    style={{ whiteSpace: 'nowrap', fontWeight: 700 }}
                   >
-                    📸 Open Batch Scanner
+                    Open batch scanner
                   </a>
                 </div>
               </div>
@@ -386,16 +381,18 @@ export default function SessionPage() {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {attendance.map((rec, i) => (
-                    <div key={rec.matric_number} style={{
-                      display: 'flex', alignItems: 'center', gap: '12px',
-                      padding: '10px 14px', background: 'rgba(255,255,255,0.03)',
-                      borderRadius: '10px', border: '1px solid var(--border-subtle)',
-                      animation: 'fadeInUp 0.3s ease',
+                    <div key={rec.matric_number} className="record-enter" style={{
+                      display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+                      padding: 'var(--sp-2) var(--sp-4)',
+                      borderBottom: '1px solid var(--border-subtle)',
                     }}>
                       <div style={{
-                        width: 28, height: 28, borderRadius: '50%',
-                        background: 'var(--brand-gradient)', display: 'grid',
-                        placeItems: 'center', fontSize: '12px', fontWeight: 700,
+                        width: 26, height: 26, borderRadius: '50%',
+                        background: 'var(--accent-muted)',
+                        border: '1px solid var(--accent-border)',
+                        display: 'grid', placeItems: 'center',
+                        fontSize: 'var(--text-xs)', fontWeight: 700,
+                        color: 'var(--accent)',
                         flexShrink: 0,
                       }}>
                         {rec.full_name.charAt(0)}

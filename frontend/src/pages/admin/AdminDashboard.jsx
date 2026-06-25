@@ -243,11 +243,26 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
         <div className="page-body fade-in-up">
           {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
 
-          {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '24px' }}>
-            <StatCard label="Total Students"    value={loading ? '…' : stats?.students}  icon="👥" color="var(--brand-mid)" />
-            <StatCard label="Active Courses"    value={loading ? '…' : stats?.courses}   icon="📚" color="var(--info)" />
-            <StatCard label="Conflicts Flagged" value={loading ? '…' : stats?.conflicts} icon="⚠️" color="var(--warning)" />
+          {/* Metrics — inline row, no emoji pedestals */}
+          <div className="metric-row">
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: 'var(--accent)' }}>{loading ? '—' : stats?.students}</div>
+              <div className="metric-label">Enrolled students</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value">{loading ? '—' : stats?.courses}</div>
+              <div className="metric-label">Active courses</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: (stats?.conflicts ?? 0) > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                {loading ? '—' : stats?.conflicts}
+              </div>
+              <div className="metric-label">Similarity flags</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: 'var(--accent)' }}>{loading ? '—' : users.length}</div>
+              <div className="metric-label">System users</div>
+            </div>
           </div>
 
           {/* Tab bar */}
@@ -283,10 +298,10 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
                 {/* Enrollment link after creation */}
                 {newCourseLink && (
-                  <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'rgba(16,185,129,0.08)', borderRadius: 10, border: '1px solid rgba(16,185,129,0.3)' }}>
-                    <p style={{ fontSize: 12, color: 'var(--success)', fontWeight: 600, margin: '0 0 8px' }}>🔗 Enrollment Link — share with students:</p>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <code style={{ flex: 1, fontSize: 12, background: 'var(--bg-card-alt)', padding: '6px 10px', borderRadius: 6, wordBreak: 'break-all' }}>
+                  <div style={{ marginBottom: 'var(--sp-4)', padding: 'var(--sp-4)', background: 'var(--success-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--success-border)' }}>
+                    <p style={{ fontSize: 'var(--text-xs)', color: 'var(--success)', fontWeight: 600, margin: '0 0 var(--sp-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Enrollment link — share with students</p>
+                    <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
+                      <code style={{ flex: 1, fontSize: 'var(--text-xs)', background: 'var(--bg-surface)', padding: '6px 10px', borderRadius: 'var(--radius-sm)', wordBreak: 'break-all', border: '1px solid var(--border-subtle)' }}>
                         {window.location.origin + newCourseLink}
                       </code>
                       <button
@@ -294,7 +309,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                         className="btn btn-sm btn-ghost"
                         style={{ whiteSpace: 'nowrap' }}
                       >
-                        {copiedLink ? '✅ Copied!' : '📋 Copy'}
+                        {copiedLink ? 'Copied' : 'Copy'}
                       </button>
                     </div>
                   </div>
@@ -625,39 +640,36 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
           {/* ── Export ── */}
           {tab === 'export' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="card" style={{ background:'linear-gradient(135deg,rgba(79,70,229,0.08),rgba(6,182,212,0.05))', borderColor:'var(--border-brand)' }}>
-                <h4 style={{ marginBottom: '8px' }}>📥 Data Export</h4>
-                <p className="text-secondary text-sm">Download attendance and student data as CSV files for record keeping or external analysis.</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+              <div className="section-intro">
+                <h4>Export data</h4>
+                <p>Download attendance and student records as CSV. No raw biometric data is included — NDPR 2019 compliant.</p>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:'16px' }}>
-                <div className="card card-glow">
-                  <div style={{ fontSize:'32px', marginBottom:'12px' }}>📋</div>
-                  <h4 style={{ marginBottom:'6px' }}>Attendance Records</h4>
-                  <p className="text-secondary text-sm" style={{ marginBottom:'20px' }}>
-                    Full attendance log with session ID, course, timestamp, similarity score, liveness scores, and sync status.
+
+              <div className="card" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)' }}>
+                <div>
+                  <h4 style={{ marginBottom: 'var(--sp-1)' }}>Attendance records</h4>
+                  <p className="text-sm" style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                    Full log: session ID, course, timestamp, match confidence, liveness scores, and sync status.
                   </p>
-                  <a id="btn-export-attendance" href={`${API_BASE}/admin/export/attendance.csv`} target="_blank" rel="noreferrer"
-                    className="btn btn-primary" style={{ display:'inline-flex', alignItems:'center', gap:'8px' }}>
-                    📥 Download Attendance CSV
-                  </a>
                 </div>
-                <div className="card card-glow">
-                  <div style={{ fontSize:'32px', marginBottom:'12px' }}>👥</div>
-                  <h4 style={{ marginBottom:'6px' }}>Student Registry</h4>
-                  <p className="text-secondary text-sm" style={{ marginBottom:'20px' }}>
-                    All enrolled students with matric number, full name, enrollment date, and twin-flag status.
-                  </p>
-                  <a id="btn-export-students" href={`${API_BASE}/admin/export/students.csv`} target="_blank" rel="noreferrer"
-                    className="btn btn-primary" style={{ display:'inline-flex', alignItems:'center', gap:'8px' }}>
-                    📥 Download Students CSV
-                  </a>
-                </div>
+                <a id="btn-export-attendance" href={`${API_BASE}/admin/export/attendance.csv`} target="_blank" rel="noreferrer"
+                  className="btn btn-ghost" style={{ flexShrink: 0 }}>
+                  Download attendance CSV
+                </a>
               </div>
-              <div className="card" style={{ padding:'14px 20px' }}>
-                <p className="text-xs text-muted" style={{ margin:0 }}>
-                  🔒 NDPR 2019 Compliant — Exported files contain attendance metadata only. No raw biometric data is included.
-                </p>
+
+              <div className="card" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)' }}>
+                <div>
+                  <h4 style={{ marginBottom: 'var(--sp-1)' }}>Student registry</h4>
+                  <p className="text-sm" style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                    All enrolled students: matric number, full name, enrollment date, and twin-flag status.
+                  </p>
+                </div>
+                <a id="btn-export-students" href={`${API_BASE}/admin/export/students.csv`} target="_blank" rel="noreferrer"
+                  className="btn btn-ghost" style={{ flexShrink: 0 }}>
+                  Download students CSV
+                </a>
               </div>
             </div>
           )}
@@ -668,10 +680,10 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   )
 }
 
-function StatCard({ label, value, icon, color }) {
+// StatCard kept for potential future use, but not rendered in the main layout.
+function StatCard({ label, value, color }) {
   return (
-    <div className="stat-card card-glow">
-      <div style={{ fontSize:'28px', marginBottom:'4px' }}>{icon}</div>
+    <div className="stat-card">
       <div className="stat-value" style={{ color }}>{value ?? '—'}</div>
       <div className="stat-label">{label}</div>
     </div>

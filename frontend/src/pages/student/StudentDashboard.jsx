@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import { useAuth } from '../../context/AuthContext'
@@ -17,9 +17,9 @@ export default function StudentDashboard() {
   const [loading,    setLoading]    = useState(true)
   const [pending,    setPending]    = useState(0)
   const [isOnline,   setIsOnline]   = useState(navigator.onLine)
-  const [fallbackSessions, setFallbackSessions] = useState([])  // active sessions with fallback released
-  const [fallbackQRs, setFallbackQRs] = useState({})            // sessionId -> QR data URL
-  const [courseStats, setCourseStats] = useState([])            // per-course attendance %
+  const [fallbackSessions, setFallbackSessions] = useState([])
+  const [fallbackQRs, setFallbackQRs] = useState({})
+  const [courseStats, setCourseStats] = useState([])
 
   useEffect(() => {
     async function load() {
@@ -36,12 +36,10 @@ export default function StudentDashboard() {
 
     async function checkFallback() {
       try {
-        // Poll for active sessions where fallback is released and student is unmatched
         const res = await fetch(`${API_BASE}/student/fallback-sessions`, { headers: authHeaders(token) })
         if (res.ok) {
           const sessions = await res.json()
           setFallbackSessions(sessions)
-          // Generate QR for each active fallback session
           for (const s of sessions) {
             if (!fallbackQRs[s.session_id]) {
               const payload = JSON.stringify({
@@ -52,7 +50,7 @@ export default function StudentDashboard() {
               })
               const url = await QRCode.toDataURL(payload, {
                 width: 280, margin: 2,
-                color: { dark: '#0a0a1a', light: '#ffffff' },
+                color: { dark: '#0f0f0e', light: '#ffffff' },
               })
               setFallbackQRs(prev => ({ ...prev, [s.session_id]: url }))
             }
@@ -66,7 +64,6 @@ export default function StudentDashboard() {
       checkFallback()
     }
 
-    // Track pending queue
     getPendingCount().then(setPending)
     const unsub = onSyncEvent(async () => setPending(await getPendingCount()))
 
@@ -109,10 +106,10 @@ export default function StudentDashboard() {
   const totalSessions   = attendance.length
   const coursesSet      = new Set(attendance.map(a => a.course_code))
   const coursesEnrolled = coursesSet.size
-  const atRiskCount     = courseStats.filter(c => {
+  const atRiskCourses   = courseStats.filter(c => {
     const pct = c.total > 0 ? (c.present / c.total) * 100 : 100
     return pct < 75
-  }).length
+  })
 
   return (
     <div className="app-layout">
@@ -120,184 +117,186 @@ export default function StudentDashboard() {
       <div className="main-content">
         <header className="page-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: '20px' }}>Student Portal</h2>
+            <h2 style={{ margin: 0 }}>{user?.full_name}</h2>
             {user?.matric_number && (
-              <p className="font-mono text-sm text-muted" style={{ marginTop: '2px' }}>{user.matric_number}</p>
+              <p className="font-mono text-muted" style={{ marginTop: '2px', fontSize: 'var(--text-xs)' }}>
+                {user.matric_number}
+              </p>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
               <div className={`sync-dot ${isOnline ? 'online' : 'offline'}`} />
               {isOnline ? 'Online' : 'Offline'}
             </div>
             {pending > 0 && <span className="badge badge-warning">{pending} queued</span>}
-            <span className="badge badge-success">Student</span>
+            <span className="badge badge-brand">Student</span>
           </div>
         </header>
 
         <div className="page-body fade-in-up">
-          {/* Welcome */}
-          <div className="card" style={{ marginBottom: '20px', background: 'linear-gradient(135deg,rgba(16,185,129,0.1),rgba(6,182,212,0.06))', borderColor: 'rgba(16,185,129,0.3)' }}>
-            <h3>Welcome, {user?.full_name} 👋</h3>
-            <p className="text-secondary text-sm" style={{ marginTop: '6px' }}>
-              Mark your attendance by scanning the QR code your lecturer displays in class.
-            </p>
+
+          {/* ── At-risk warning — surfaces immediately, not buried ── */}
+          {atRiskCourses.length > 0 && (
+            <div className="alert alert-danger" style={{ marginBottom: 'var(--sp-5)' }}>
+              <strong>{atRiskCourses.length} course{atRiskCourses.length > 1 ? 's' : ''}</strong> below 75% attendance.
+              {' '}You may be barred from examinations.
+            </div>
+          )}
+
+          {/* ── Offline queue warning ── */}
+          {pending > 0 && (
+            <div className="alert alert-warning" style={{ marginBottom: 'var(--sp-5)' }}>
+              <strong>{pending}</strong> attendance record{pending > 1 ? 's' : ''} queued offline.
+              {isOnline ? ' Syncing now…' : ' Will sync automatically when you reconnect.'}
+            </div>
+          )}
+
+          {/* ── Metrics: inline row, no emoji pedestals ── */}
+          <div className="metric-row">
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: 'var(--accent)' }}>
+                {loading ? '—' : coursesEnrolled}
+              </div>
+              <div className="metric-label">Courses enrolled</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value">{loading ? '—' : totalSessions}</div>
+              <div className="metric-label">Sessions attended</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: pending > 0 ? 'var(--warning)' : 'var(--text-muted)' }}>
+                {pending}
+              </div>
+              <div className="metric-label">Pending sync</div>
+            </div>
+            <div className="metric-item">
+              <div className="metric-value" style={{ color: atRiskCourses.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                {loading ? '—' : atRiskCourses.length}
+              </div>
+              <div className="metric-label">At-risk courses</div>
+            </div>
           </div>
 
-          {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '20px' }}>
-            <div className="stat-card card-glow">
-              <div style={{ fontSize: '22px' }}>📚</div>
-              <div className="stat-value" style={{ color: 'var(--brand-mid)' }}>{loading ? '…' : coursesEnrolled}</div>
-              <div className="stat-label">Courses</div>
-            </div>
-            <div className="stat-card card-glow">
-              <div style={{ fontSize: '22px' }}>✅</div>
-              <div className="stat-value" style={{ color: 'var(--success)' }}>{loading ? '…' : totalSessions}</div>
-              <div className="stat-label">Sessions Attended</div>
-            </div>
-            <div className="stat-card card-glow">
-              <div style={{ fontSize: '22px' }}>{pending > 0 ? '⏳' : '☁️'}</div>
-              <div className="stat-value" style={{ color: pending > 0 ? 'var(--warning)' : 'var(--info)' }}>{pending}</div>
-              <div className="stat-label">Pending Sync</div>
-            </div>
-          </div>
-
-          {/* Fallback QR — only shown when lecturer releases it for this student */}
+          {/* ── Fallback QR — shown only when lecturer releases it ── */}
           {fallbackSessions.length > 0 && fallbackSessions.map(s => (
             <div key={s.session_id} style={{
-              background: 'linear-gradient(135deg,rgba(245,158,11,0.12),rgba(234,179,8,0.06))',
-              border: '1px solid rgba(245,158,11,0.4)',
-              borderRadius: 14,
-              padding: 20,
-              marginBottom: 20,
+              background: 'var(--warning-bg)',
+              border: '1px solid var(--warning-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: 'var(--sp-5)',
+              marginBottom: 'var(--sp-5)',
             }}>
-              <h4 style={{ margin: '0 0 4px', color: '#fbbf24' }}>📱 Fallback QR Active</h4>
-              <p className="text-sm text-muted" style={{ margin: '0 0 16px' }}>
-                {s.course_code} — Session {s.session_id?.slice(0,8)}. Show this to your lecturer.
-                Expires in {s.minutes_remaining} min.
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', marginBottom: 'var(--sp-1)' }}>
+                <span className="badge badge-warning">Fallback QR</span>
+                <span className="font-mono text-sm">{s.course_code}</span>
+                <span className="text-muted text-sm">· Session {s.session_id?.slice(0, 8)}</span>
+              </div>
+              <p className="text-sm" style={{ margin: '0 0 var(--sp-4)', color: 'var(--text-secondary)' }}>
+                The face scan did not detect you. Show this QR to your lecturer to confirm
+                you are physically present. Expires in {s.minutes_remaining} min.
               </p>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 'var(--sp-4)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 {fallbackQRs[s.session_id] && (
-                  <div style={{ background: '#fff', borderRadius: 12, padding: 12 }}>
-                    <img src={fallbackQRs[s.session_id]} alt="Fallback QR" width={160} height={160} />
+                  <div className="qr-box">
+                    <img src={fallbackQRs[s.session_id]} alt="Fallback QR" width={140} height={140} />
                   </div>
                 )}
-                <div style={{ flex: 1 }}>
-                  <p className="text-sm" style={{ color: '#fbbf24', marginBottom: 12 }}>
-                    ⚠️ The face scan did not detect you. Show this QR to your lecturer who will
-                    confirm you are physically present.
-                  </p>
-                  <button
-                    onClick={() => claimFallback(s.session_id)}
-                    style={{
-                      background: '#f59e0b',
-                      color: '#0f172a',
-                      border: 'none',
-                      borderRadius: 10,
-                      padding: '10px 20px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    ✅ Mark Me Present (Fallback)
-                  </button>
-                </div>
+                <button
+                  onClick={() => claimFallback(s.session_id)}
+                  className="btn btn-ghost"
+                  style={{ borderColor: 'var(--warning-border)', color: 'var(--warning)', alignSelf: 'flex-end' }}
+                >
+                  Confirm present (fallback)
+                </button>
               </div>
             </div>
           ))}
 
-          {/* Quick actions */}
-          <div className="card" style={{ marginBottom: '20px' }}>
-            <h4 style={{ marginBottom: '14px' }}>Quick Actions</h4>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <Link to="/enroll" className="btn btn-ghost">🔄 Re-Enroll Face</Link>
-              <Link to="/student/qr" className="btn btn-ghost">📲 My QR Code</Link>
-            </div>
-          </div>
-
-          {/* At-risk warning */}
-          {atRiskCount > 0 && (
-            <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
-              ⚠️ <strong>{atRiskCount} course{atRiskCount > 1 ? 's' : ''}</strong> below the 75% attendance threshold.
-              You may be barred from examinations. Attend more lectures.
-            </div>
-          )}
-
-          {/* Offline queue warning */}
-          {pending > 0 && (
-            <div className="alert alert-warning" style={{ marginBottom: '20px' }}>
-              📶 You have <strong>{pending}</strong> attendance record{pending > 1 ? 's' : ''} queued offline.
-              {isOnline ? ' Syncing now…' : ' They will sync automatically when you reconnect.'}
-            </div>
-          )}
-
-          {/* Course attendance percentages */}
+          {/* ── Course attendance bars ── */}
           {courseStats.length > 0 && (
-            <div className="card" style={{ marginBottom: 20, padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-                <h4 style={{ margin: 0 }}>Course Attendance</h4>
+            <div className="card" style={{ marginBottom: 'var(--sp-5)', padding: 0, overflow: 'hidden' }}>
+              <div style={{ padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--border-subtle)' }}>
+                <h4 style={{ margin: 0 }}>Attendance by course</h4>
               </div>
               {courseStats.map(c => {
-                const pct = c.total > 0 ? Math.round((c.present / c.total) * 100) : 0
+                const pct   = c.total > 0 ? Math.round((c.present / c.total) * 100) : 0
                 const atRisk = pct < 75
                 return (
                   <div key={c.course_code} style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '12px 20px',
+                    display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
+                    padding: 'var(--sp-3) var(--sp-5)',
                     borderBottom: '1px solid var(--border-subtle)',
                   }}>
-                    <span className="badge badge-brand font-mono">{c.course_code}</span>
-                    <div style={{ flex: 1, background: 'var(--bg-card-alt)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: atRisk ? 'var(--danger)' : 'var(--success)', borderRadius: 4, transition: 'width 0.6s ease' }} />
+                    <span className="badge badge-brand font-mono" style={{ minWidth: 80, justifyContent: 'center' }}>
+                      {c.course_code}
+                    </span>
+                    <div style={{ flex: 1, background: 'var(--border-subtle)', borderRadius: 2, height: 4, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${pct}%`, height: '100%',
+                        background: atRisk ? 'var(--danger)' : 'var(--accent)',
+                        borderRadius: 2, transition: 'width 0.5s ease',
+                      }} />
                     </div>
-                    <span style={{ minWidth: 44, fontWeight: 700, color: atRisk ? 'var(--danger)' : 'var(--success)', fontSize: 13 }}>{pct}%</span>
-                    {atRisk && <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)', fontSize: 10 }}>AT RISK</span>}
+                    <span style={{ minWidth: 44, fontWeight: 700, fontSize: 'var(--text-sm)', color: atRisk ? 'var(--danger)' : 'var(--text-primary)', textAlign: 'right' }}>
+                      {pct}%
+                    </span>
+                    {atRisk && <span className="badge badge-danger">At risk</span>}
                   </div>
                 )
               })}
             </div>
           )}
 
-          {/* Attendance history */}
+          {/* ── Quick actions — plain, no card wrapper ── */}
+          <div style={{ display: 'flex', gap: 'var(--sp-3)', marginBottom: 'var(--sp-5)', flexWrap: 'wrap' }}>
+            <Link to="/enroll" className="btn btn-ghost">Re-enroll face</Link>
+            <Link to="/student/qr" className="btn btn-ghost">My QR code</Link>
+          </div>
+
+          {/* ── Attendance history ── */}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)' }}>
-              <h4 style={{ margin: 0 }}>Attendance History</h4>
+            <div style={{ padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--border-subtle)' }}>
+              <h4 style={{ margin: 0 }}>Attendance history</h4>
             </div>
             {loading ? (
-              <div style={{ padding: '40px', textAlign: 'center' }}>
+              <div style={{ padding: 'var(--sp-10)', textAlign: 'center' }}>
                 <div className="spinner" style={{ margin: '0 auto' }} />
               </div>
             ) : attendance.length === 0 ? (
-              <div style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                <div style={{ fontSize: '32px', marginBottom: '12px' }}>📋</div>
-                <p>No attendance records yet.<br />Scan a session QR to mark your first attendance.</p>
+              <div className="empty-state">
+                <span className="empty-state-label">No records yet</span>
+                <p>Scan a session QR in class to mark your first attendance.</p>
               </div>
             ) : (
               <table className="data-table">
                 <thead>
-                  <tr><th>Date & Time</th><th>Course</th><th>Match</th><th>Method</th><th>Status</th></tr>
+                  <tr><th>Date &amp; Time</th><th>Course</th><th>Match confidence</th><th>Method</th><th>Status</th></tr>
                 </thead>
                 <tbody>
                   {attendance.map((a, i) => (
                     <tr key={i}>
-                      <td className="text-sm">{new Date(a.matched_at).toLocaleString()}</td>
+                      <td className="font-mono" style={{ fontSize: 'var(--text-xs)' }}>{new Date(a.matched_at).toLocaleString()}</td>
                       <td><span className="badge badge-brand font-mono">{a.course_code}</span></td>
                       <td>
-                        <span style={{ fontWeight: 600, color: a.similarity_distance < 0.35 ? 'var(--success)' : 'var(--warning)' }}>
+                        <span style={{
+                          fontWeight: 600,
+                          fontSize: 'var(--text-sm)',
+                          color: a.similarity_distance < 0.35 ? 'var(--success)' : 'var(--warning)',
+                        }}>
                           {a.method === 'fallback_qr' ? '—' : `${((1 - (a.similarity_distance ?? 0)) * 100).toFixed(1)}%`}
                         </span>
                       </td>
                       <td>
-                        {a.method === 'batch_face' && <span className="badge" style={{ background: '#4f46e522', color: '#818cf8' }}>📸 Face Scan</span>}
-                        {a.method === 'fallback_qr' && <span className="badge" style={{ background: '#f59e0b22', color: '#fbbf24' }}>📱 Fallback QR</span>}
-                        {a.method === 'manual_override' && <span className="badge" style={{ background: '#ef444422', color: '#f87171' }}>🔧 Manual</span>}
-                        {!a.method && <span className="badge badge-success">✅ Live</span>}
+                        {a.method === 'batch_face'      && <span className="badge badge-brand">Face scan</span>}
+                        {a.method === 'fallback_qr'     && <span className="badge badge-warning">Fallback QR</span>}
+                        {a.method === 'manual_override' && <span className="badge badge-danger">Manual</span>}
+                        {!a.method                      && <span className="badge badge-success">Live</span>}
                       </td>
                       <td>
                         {a.synced_from_client
-                          ? <span className="badge" style={{ background: 'var(--info-bg)', color: 'var(--info)' }}>📶 Synced</span>
-                          : <span className="badge badge-success">✅ Live</span>
+                          ? <span className="badge badge-info">Synced</span>
+                          : <span className="badge badge-success">Live</span>
                         }
                       </td>
                     </tr>
@@ -306,6 +305,7 @@ export default function StudentDashboard() {
               </table>
             )}
           </div>
+
         </div>
       </div>
     </div>

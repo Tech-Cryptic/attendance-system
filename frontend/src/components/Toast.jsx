@@ -24,10 +24,10 @@ export const toast = {
 
 const ICONS  = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' }
 const COLORS = {
-  success: { bg: 'rgba(16,185,129,0.12)', border: 'var(--success)', text: 'var(--success)' },
-  error:   { bg: 'rgba(239,68,68,0.12)',  border: 'var(--danger)',  text: 'var(--danger)'  },
-  info:    { bg: 'rgba(6,182,212,0.12)',  border: 'var(--info)',    text: 'var(--info)'    },
-  warning: { bg: 'rgba(245,158,11,0.12)', border: 'var(--warning)', text: 'var(--warning)' },
+  success: { bg: 'var(--success-bg)', border: 'var(--success)', text: 'var(--success)' },
+  error:   { bg: 'var(--danger-bg)',  border: 'var(--danger)',  text: 'var(--danger)'  },
+  info:    { bg: 'var(--accent-muted)', border: 'var(--accent)', text: 'var(--accent)'  },
+  warning: { bg: 'var(--warning-bg)', border: 'var(--warning)', text: 'var(--warning)' },
 }
 
 export function ToastContainer() {
