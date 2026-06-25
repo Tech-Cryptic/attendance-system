@@ -186,6 +186,99 @@ def regenerate_enrollment_link(
         release_connection(conn)
 
 
+@router.delete("/courses/{course_code}", status_code=204)
+def delete_course(
+    course_code: str,
+    actor: dict = Depends(require_roles("admin"))
+):
+    """
+    Admin-only: delete a course and all associated records.
+    Cascade order:
+      attendance_records -> sessions -> course_enrollments
+      -> enrollment_tokens -> courses
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        code = course_code.strip().upper()
+
+        # Verify course exists
+        cur.execute("SELECT course_code FROM courses WHERE course_code = %s", (code,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail=f"Course {code} not found")
+
+        # 1. Delete attendance records for all sessions in this course
+        cur.execute(
+            "DELETE FROM attendance_records WHERE session_id IN "
+            "(SELECT session_id FROM sessions WHERE course_code = %s)",
+            (code,)
+        )
+        # 2. Delete sessions
+        cur.execute("DELETE FROM sessions WHERE course_code = %s", (code,))
+        # 3. Delete course enrollments
+        cur.execute("DELETE FROM course_enrollments WHERE course_code = %s", (code,))
+        # 4. Delete enrollment tokens
+        cur.execute("DELETE FROM enrollment_tokens WHERE course_code = %s", (code,))
+        # 5. Delete course
+        cur.execute("DELETE FROM courses WHERE course_code = %s", (code,))
+
+        conn.commit()
+        cur.close()
+        return
+    except HTTPException:
+        conn.rollback(); raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
+class CourseUpdate(BaseModel):
+    course_title:   str | None = None
+    lecturer_id:    int | None = None
+    expected_count: int | None = None
+
+
+@router.patch("/courses/{course_code}")
+def update_course(
+    course_code: str,
+    body: CourseUpdate,
+    actor: dict = Depends(require_roles("admin"))
+):
+    """Admin-only: update course title, assigned lecturer, or expected count."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        code = course_code.strip().upper()
+
+        cur.execute("SELECT course_code FROM courses WHERE course_code = %s", (code,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail=f"Course {code} not found")
+
+        updates = []
+        values  = []
+        if body.course_title   is not None: updates.append("course_title = %s");   values.append(body.course_title.strip())
+        if body.lecturer_id    is not None: updates.append("lecturer_id = %s");     values.append(body.lecturer_id)
+        if body.expected_count is not None: updates.append("expected_count = %s");  values.append(body.expected_count)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        values.append(code)
+        cur.execute(f"UPDATE courses SET {', '.join(updates)} WHERE course_code = %s", values)
+        conn.commit()
+        cur.close()
+        return {"course_code": code, "updated": True}
+    except HTTPException:
+        conn.rollback(); raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
+
+
 
 @router.get("/lecturers")
 def list_lecturers(actor: dict = Depends(require_roles("admin"))):
@@ -287,6 +380,99 @@ def delete_user(
         release_connection(conn)
 
 
+# ── User check (duplicate guard) ─────────────────────────────
+
+@router.get("/users/check")
+def check_user_exists(
+    email: str,
+    matric: str = "",
+    actor: dict = Depends(require_roles("admin"))
+):
+    """
+    Pre-flight check before creating a user account.
+    Returns whether the email or linked_matric already exists.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        result = {"email_taken": False, "matric_taken": False}
+
+        cur.execute("SELECT id FROM users WHERE email = %s", (email.strip().lower(),))
+        if cur.fetchone():
+            result["email_taken"] = True
+
+        if matric.strip():
+            cur.execute("SELECT id FROM users WHERE linked_matric = %s", (matric.strip(),))
+            if cur.fetchone():
+                result["matric_taken"] = True
+
+        cur.close()
+        return result
+    finally:
+        release_connection(conn)
+
+
+# ── User edit (PATCH) ─────────────────────────────────────────
+
+class UserUpdate(BaseModel):
+    full_name:     str | None = None
+    email:         str | None = None
+    linked_matric: str | None = None
+    password:      str | None = None   # optional — only patched if provided
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: int,
+    body: UserUpdate,
+    actor: dict = Depends(require_roles("admin"))
+):
+    """Admin-only: edit a user account's name, email, linked matric, or password."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("SELECT id, role FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        updates = []
+        values  = []
+
+        if body.full_name     is not None: updates.append("full_name = %s");     values.append(body.full_name.strip())
+        if body.email         is not None:
+            # Uniqueness check
+            cur.execute("SELECT id FROM users WHERE email = %s AND id != %s", (body.email.strip().lower(), user_id))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Email already in use by another account")
+            updates.append("email = %s"); values.append(body.email.strip().lower())
+        if body.linked_matric is not None:
+            # Uniqueness check for matric
+            cur.execute("SELECT id FROM users WHERE linked_matric = %s AND id != %s", (body.linked_matric.strip(), user_id))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Matric number already linked to another account")
+            updates.append("linked_matric = %s"); values.append(body.linked_matric.strip() or None)
+        if body.password      is not None and body.password.strip():
+            import bcrypt
+            hashed = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt(rounds=12)).decode()
+            updates.append("password_hash = %s"); values.append(hashed)
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        values.append(user_id)
+        cur.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = %s", values)
+        conn.commit()
+        cur.close()
+        return {"id": user_id, "updated": True}
+    except HTTPException:
+        conn.rollback(); raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        release_connection(conn)
 
 
 # ── Export ────────────────────────────────────────────────────

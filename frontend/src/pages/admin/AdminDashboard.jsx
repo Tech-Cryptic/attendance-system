@@ -42,11 +42,103 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   const [userForm, setUserForm] = useState({ email: '', password: '', full_name: '', role: 'lecturer', linked_matric: '' })
   const [userCreating, setUserCreating] = useState(false)
   const [userMsg, setUserMsg] = useState('')
+  const [userCheckMsg, setUserCheckMsg] = useState('')   // duplicate warning
+
+  // ── User edit modal ─────────────────────────────────────────
+  const [editUser, setEditUser] = useState(null)   // user object being edited, or null
+  const [editForm, setEditForm] = useState({ full_name: '', email: '', linked_matric: '', password: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editMsg, setEditMsg] = useState('')
+
+  // ── Course reassign/delete ───────────────────────────────────
+  const [courseActionMsg, setCourseActionMsg] = useState('')
 
   function copyLink(url) {
     navigator.clipboard.writeText(window.location.origin + url)
       .then(() => { setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2000) })
       .catch(() => {})
+  }
+
+  // ── Duplicate-check before user creation ────────────────────
+  async function checkUserDuplicate(email, matric) {
+    if (!email) { setUserCheckMsg(''); return }
+    try {
+      const params = new URLSearchParams({ email })
+      if (matric) params.append('matric', matric)
+      const res = await fetch(`${API_BASE}/admin/users/check?${params}`, { headers: authHeaders(token) })
+      if (!res.ok) return
+      const { email_taken, matric_taken } = await res.json()
+      if (email_taken && matric_taken) setUserCheckMsg('⚠ This email and matric are already registered.')
+      else if (email_taken)            setUserCheckMsg('⚠ This email is already registered.')
+      else if (matric_taken)           setUserCheckMsg('⚠ This matric number is already linked to another account.')
+      else                             setUserCheckMsg('')
+    } catch {}
+  }
+
+  // ── Open edit modal ─────────────────────────────────────────
+  function openEditUser(u) {
+    setEditUser(u)
+    setEditForm({ full_name: u.full_name, email: u.email, linked_matric: u.linked_matric ?? '', password: '' })
+    setEditMsg('')
+  }
+
+  // ── Save user edits ─────────────────────────────────────────
+  async function handleEditUser(e) {
+    e.preventDefault()
+    if (!editUser) return
+    setEditSaving(true); setEditMsg('')
+    try {
+      const body = { full_name: editForm.full_name, email: editForm.email }
+      if (editUser.role === 'student') body.linked_matric = editForm.linked_matric
+      if (editForm.password) body.password = editForm.password
+
+      const res = await fetch(`${API_BASE}/admin/users/${editUser.id}`, {
+        method: 'PATCH', headers: authHeaders(token), body: JSON.stringify(body)
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditMsg(`Error: ${data.detail}`); return }
+
+      setUsers(prev => prev.map(u => u.id === editUser.id
+        ? { ...u, full_name: editForm.full_name, email: editForm.email, linked_matric: editForm.linked_matric || u.linked_matric }
+        : u
+      ))
+      setEditUser(null)
+    } catch { setEditMsg('Network error.') }
+    finally { setEditSaving(false) }
+  }
+
+  // ── Delete course ────────────────────────────────────────────
+  async function handleDeleteCourse(courseCode) {
+    if (!window.confirm(
+      `Delete ${courseCode}?\n\nThis will permanently remove the course, all its sessions, attendance records, course enrollments, and enrollment tokens.\n\nThis cannot be undone.`
+    )) return
+    try {
+      const res = await fetch(`${API_BASE}/admin/courses/${courseCode}`, {
+        method: 'DELETE', headers: authHeaders(token)
+      })
+      if (!res.ok && res.status !== 204) {
+        const d = await res.json().catch(() => ({}))
+        alert(`Error deleting course: ${d.detail ?? res.status}`)
+        return
+      }
+      setCourses(prev => prev.filter(c => c.course_code !== courseCode))
+      setStats(prev => ({ ...prev, courses: (prev?.courses ?? 1) - 1 }))
+      setCourseActionMsg(`Course ${courseCode} deleted.`)
+    } catch { alert('Network error deleting course.') }
+  }
+
+  // ── Reassign lecturer on a course ───────────────────────────
+  async function handleReassignLecturer(courseCode, lecturerId) {
+    try {
+      const res = await fetch(`${API_BASE}/admin/courses/${courseCode}`, {
+        method: 'PATCH', headers: authHeaders(token),
+        body: JSON.stringify({ lecturer_id: lecturerId ? parseInt(lecturerId) : null })
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(`Error: ${d.detail}`); return }
+      const lecName = lecturers.find(l => l.id === parseInt(lecturerId))?.full_name ?? 'Unassigned'
+      setCourses(prev => prev.map(c => c.course_code === courseCode ? { ...c, lecturer_name: lecName } : c))
+      setCourseActionMsg(`Lecturer updated for ${courseCode}.`)
+    } catch { alert('Network error.') }
   }
 
   // ── Load data ────────────────────────────────────────────────
@@ -372,26 +464,45 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                 </div>
               )}
 
+              {courseActionMsg && (
+                <div className="alert alert-success" style={{ marginBottom: 'var(--sp-3)' }}>
+                  {courseActionMsg}
+                </div>
+              )}
+
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <h4 style={{ margin: 0 }}>All Courses ({courses.length})</h4>
                 </div>
                 <table className="data-table">
-                  <thead><tr><th>Code</th><th>Title</th><th>Lecturer</th><th>Enrolled</th><th>Expected</th><th>Status</th><th>Enrollment Link</th></tr></thead>
+                  <thead><tr><th>Code</th><th>Title</th><th>Lecturer</th><th>Enrolled</th><th>Expected</th><th>Status</th><th>Enrollment Link</th><th>Actions</th></tr></thead>
                   <tbody>
                     {courses.length === 0
-                      ? <tr><td colSpan={7} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
+                      ? <tr><td colSpan={8} style={{ textAlign:'center', color:'var(--text-muted)', padding:'32px' }}>No courses yet.</td></tr>
                       : courses.map(c => (
                           <tr key={c.course_code}>
                             <td><span className="badge badge-brand font-mono">{c.course_code}</span></td>
                             <td>{c.course_title}</td>
-                            <td style={{ color: 'var(--text-muted)' }}>{c.lecturer_name ?? '—'}</td>
+                            <td>
+                              {/* Inline lecturer reassign */}
+                              <select
+                                className="form-input"
+                                style={{ padding: '4px 8px', fontSize: 'var(--text-xs)', minHeight: 'unset', height: 30 }}
+                                defaultValue={lecturers.find(l => l.full_name === c.lecturer_name)?.id ?? ''}
+                                onChange={e => handleReassignLecturer(c.course_code, e.target.value)}
+                              >
+                                <option value="">Unassigned</option>
+                                {lecturers.map(l => (
+                                  <option key={l.id} value={l.id}>{l.full_name}</option>
+                                ))}
+                              </select>
+                            </td>
                             <td style={{ fontWeight: 600 }}>{c.enrolled_count ?? '—'}</td>
                             <td style={{ color: 'var(--text-muted)' }}>{c.expected_count ?? '—'}</td>
                             <td>
                               {c.over_enrollment_flagged
-                                ? <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>⚠️ Over</span>
-                                : <span className="badge badge-success">✅ OK</span>
+                                ? <span className="badge" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>Over</span>
+                                : <span className="badge badge-success">OK</span>
                               }
                             </td>
                             <td>
@@ -401,17 +512,26 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                                   style={{ fontSize: 11 }}
                                   onClick={() => copyLink(`/enroll?token=${c.enrollment_link_token}&course=${c.course_code}`)}
                                 >
-                                  📋 Copy Link
+                                  Copy link
                                 </button>
                               ) : (
                                 <button
                                   className="btn btn-sm btn-ghost"
-                                  style={{ fontSize: 11, color: 'var(--brand-mid)', fontWeight: 600 }}
+                                  style={{ fontSize: 11 }}
                                   onClick={() => handleGenerateLink(c.course_code)}
                                 >
-                                  🔄 Generate Link
+                                  Generate link
                                 </button>
                               )}
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                style={{ color: 'var(--danger)' }}
+                                onClick={() => handleDeleteCourse(c.course_code)}
+                              >
+                                Delete
+                              </button>
                             </td>
                           </tr>
                         ))
@@ -531,6 +651,9 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                   Create login accounts for lecturers or students. Student accounts must link to a valid matric number.
                 </p>
                 {userMsg && <div className={`alert ${userMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
+                {userCheckMsg && (
+                  <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{userCheckMsg}</div>
+                )}
                 
                 <form onSubmit={handleCreateUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -542,7 +665,9 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                     <div className="form-group" style={{ flex: 1, minWidth: 200 }}>
                       <label className="form-label">Email Address</label>
                       <input className="form-input" type="email" placeholder="user@unilorin.edu.ng" value={userForm.email}
-                        onChange={e => setUserForm(p => ({...p, email: e.target.value}))} required />
+                        onChange={e => setUserForm(p => ({...p, email: e.target.value}))}
+                        onBlur={e => checkUserDuplicate(e.target.value, userForm.linked_matric)}
+                        required />
                     </div>
                   </div>
 
@@ -564,7 +689,9 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                       <div className="form-group" style={{ flex: 1, minWidth: 150 }}>
                         <label className="form-label">Linked Matric Number</label>
                         <input className="form-input font-mono" placeholder="e.g. 22/01DL068" value={userForm.linked_matric}
-                          onChange={e => setUserForm(p => ({...p, linked_matric: e.target.value}))} required />
+                          onChange={e => setUserForm(p => ({...p, linked_matric: e.target.value}))}
+                          onBlur={e => checkUserDuplicate(userForm.email, e.target.value)}
+                          required />
                       </div>
                     )}
                   </div>
@@ -620,13 +747,21 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                             {u.id === parseInt(user?.id) ? (
                               <span className="text-xs text-muted" style={{ fontStyle: 'italic' }}>Active Admin</span>
                             ) : (
-                              <button
-                                className="btn btn-sm btn-ghost"
-                                style={{ color: 'var(--danger)', fontWeight: 600 }}
-                                onClick={() => handleDeleteUser(u.id, u.full_name)}
-                              >
-                                🗑️ Delete
-                              </button>
+                              <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                                <button
+                                  className="btn btn-sm btn-ghost"
+                                  onClick={() => openEditUser(u)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  className="btn btn-sm btn-ghost"
+                                  style={{ color: 'var(--danger)' }}
+                                  onClick={() => handleDeleteUser(u.id, u.full_name)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -676,6 +811,60 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
 
         </div>
       </div>
+
+      {/* ── Edit User Modal ── */}
+      {editUser && (
+        <div className="modal-backdrop" onClick={() => setEditUser(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 style={{ margin: 0 }}>Edit account</h3>
+                <p className="text-muted" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--sp-1)' }}>
+                  {editUser.email} · {editUser.role}
+                </p>
+              </div>
+              <button className="modal-close-btn" onClick={() => setEditUser(null)}>✕</button>
+            </div>
+
+            {editMsg && <div className="alert alert-danger" style={{ marginBottom: 'var(--sp-4)' }}>{editMsg}</div>}
+
+            <form onSubmit={handleEditUser} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+              <div className="form-group">
+                <label className="form-label">Full name</label>
+                <input className="form-input" value={editForm.full_name}
+                  onChange={e => setEditForm(p => ({...p, full_name: e.target.value}))} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email address</label>
+                <input className="form-input" type="email" value={editForm.email}
+                  onChange={e => setEditForm(p => ({...p, email: e.target.value}))} required />
+              </div>
+              {editUser.role === 'student' && (
+                <div className="form-group">
+                  <label className="form-label">Linked matric number</label>
+                  <input className="form-input font-mono" value={editForm.linked_matric}
+                    onChange={e => setEditForm(p => ({...p, linked_matric: e.target.value}))} />
+                </div>
+              )}
+              <div className="form-group">
+                <label className="form-label">
+                  New password
+                  <span className="text-muted" style={{ fontWeight: 400, marginLeft: 'var(--sp-2)' }}>(leave blank to keep current)</span>
+                </label>
+                <input className="form-input" type="password" placeholder="••••••••" minLength={8}
+                  value={editForm.password}
+                  onChange={e => setEditForm(p => ({...p, password: e.target.value}))} />
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--sp-3)', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setEditUser(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                  {editSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
