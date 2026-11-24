@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import Sidebar from '../../components/Sidebar'
+import AppShell from '../../components/AppShell'
 import { useAuth } from '../../context/AuthContext'
 import { onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
 import { getPresencePendingCount } from '../../lib/presence'
@@ -51,7 +51,7 @@ export default function StudentDashboard() {
               })
               const url = await QRCode.toDataURL(payload, {
                 width: 280, margin: 2,
-                color: { dark: '#0f0f0e', light: '#ffffff' },
+                color: { dark: '#17211f', light: '#ffffff' },
               })
               setFallbackQRs(prev => ({ ...prev, [s.session_id]: url }))
             }
@@ -116,31 +116,21 @@ export default function StudentDashboard() {
   })
 
   return (
-    <div className="app-layout">
-      <Sidebar />
-      <div className="main-content">
-        <header className="page-header">
-          <div>
-            <h2 style={{ margin: 0 }}>{user?.full_name}</h2>
-            {user?.matric_number && (
-              <p className="font-mono text-muted" style={{ marginTop: '2px', fontSize: 'var(--text-xs)' }}>
-                {user.matric_number}
-              </p>
-            )}
+    <AppShell
+      title={user?.full_name}
+      subtitle={user?.matric_number}
+      actions={
+        <div className="header-status">
+          <div className="connection-status">
+            <div className={`sync-dot ${isOnline ? 'online' : 'offline'}`} />
+            {isOnline ? 'Online' : 'Offline'}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              <div className={`sync-dot ${isOnline ? 'online' : 'offline'}`} />
-              {isOnline ? 'Online' : 'Offline'}
-            </div>
-            {pending > 0 && <span className="badge badge-warning">{pending} queued</span>}
-            <span className="badge badge-brand">Student</span>
-          </div>
-        </header>
-
-        <div className="page-body fade-in-up">
-
-          {/* ── At-risk warning — surfaces immediately, not buried ── */}
+          {pending > 0 && <span className="badge badge-warning">{pending} queued</span>}
+          <span className="badge badge-info">Student</span>
+        </div>
+      }
+    >
+      {/* ── At-risk warning — surfaces immediately, not buried ── */}
           {atRiskCourses.length > 0 && (
             <div className="alert alert-danger" style={{ marginBottom: 'var(--sp-5)' }}>
               <strong>{atRiskCourses.length} course{atRiskCourses.length > 1 ? 's' : ''}</strong> below 75% attendance.
@@ -314,9 +304,6 @@ export default function StudentDashboard() {
               </table>
             )}
           </div>
-
-        </div>
-      </div>
-    </div>
+    </AppShell>
   )
 }

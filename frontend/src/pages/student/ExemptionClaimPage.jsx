@@ -46,8 +46,8 @@ export default function ExemptionClaimPage() {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card fade-in-up">
+    <div className="focus-page">
+      <div className="focus-card fade-in-up">
         <h1 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--sp-2)' }}>Attendance exemption</h1>
 
         {status === 'loading' && <p className="text-secondary">Checking your link…</p>}

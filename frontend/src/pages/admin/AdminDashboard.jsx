@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import Sidebar from '../../components/Sidebar'
+import AppShell from '../../components/AppShell'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE } from '../../lib/api'
 
@@ -321,19 +321,12 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
   ]
 
   return (
-    <div className="app-layout">
-      <Sidebar />
-      <div className="main-content">
-        <header className="page-header">
-          <div>
-            <h2 style={{ margin: 0, fontSize: '20px' }}>Admin Dashboard</h2>
-            <p className="text-sm text-muted" style={{ marginTop: '2px' }}>System management · {user?.full_name}</p>
-          </div>
-          <span className="badge badge-brand">Admin</span>
-        </header>
-
-        <div className="page-body fade-in-up">
-          {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
+    <AppShell
+      title="Admin Dashboard"
+      subtitle={`System management · ${user?.full_name}`}
+      actions={<span className="badge badge-info">Admin</span>}
+    >
+      {error && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{error}</div>}
 
           {/* Metrics — inline row, no emoji pedestals */}
           <div className="metric-row">
@@ -371,8 +364,8 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button className="btn btn-ghost" onClick={() => setTab('courses')}>Create Course</button>
                 <button className="btn btn-ghost" onClick={() => setTab('tokens')}>Issue Token</button>
-                <button className="btn btn-ghost" onClick={() => setTab('conflicts')}>🚩 View Conflicts</button>
-                <button className="btn btn-ghost" onClick={() => setTab('users')}>👤 Create Users</button>
+                <button className="btn btn-ghost" onClick={() => setTab('conflicts')}>View Conflicts</button>
+                <button className="btn btn-ghost" onClick={() => setTab('users')}>Create Users</button>
                 <button className="btn btn-ghost" onClick={() => setTab('export')}>Export Data</button>
               </div>
             </div>
@@ -697,7 +690,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                   </div>
 
                   <button type="submit" className="btn btn-primary" disabled={userCreating} style={{ alignSelf: 'flex-start' }}>
-                    {userCreating ? 'Registering…' : '👤 Register User'}
+                    {userCreating ? 'Registering…' : 'Register User'}
                   </button>
                 </form>
               </div>
@@ -809,9 +802,6 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
             </div>
           )}
 
-        </div>
-      </div>
-
       {/* ── Edit User Modal ── */}
       {editUser && (
         <div className="modal-backdrop" onClick={() => setEditUser(null)}>
@@ -865,6 +855,6 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
           </div>
         </div>
       )}
-    </div>
+    </AppShell>
   )
 }

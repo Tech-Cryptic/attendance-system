@@ -388,8 +388,8 @@ export default function AttendancePage() {
 
   // ── Render ─────────────────────────────────────────────────
   return (
-    <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: '32px' }}>
-      <div style={{ width: '100%', maxWidth: 560, zIndex: 1 }}>
+    <div className="focus-page">
+      <div className="focus-shell">
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
@@ -423,7 +423,7 @@ export default function AttendancePage() {
         {/* ── STEP 0: QR Scan ── */}
         {step === 0 && (
           <div className="card fade-in-up">
-            <h3 style={{ marginBottom: '6px' }}>📷 Scan Session QR</h3>
+            <h3 style={{ marginBottom: '6px' }}>Scan Session QR</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               Scan the QR code displayed by your lecturer to begin attendance.
             </p>
@@ -535,9 +535,8 @@ export default function AttendancePage() {
             <div style={{
               width: 72, height: 72, borderRadius: '50%', margin: '0 auto 20px',
               background: 'var(--success-bg)', border: '2px solid var(--success)',
-              display: 'grid', placeItems: 'center', fontSize: '32px',
-              boxShadow: '0 0 30px rgba(16,185,129,0.3)',
-            }}>
+               display: 'grid', placeItems: 'center', fontSize: '32px',
+             }}>
               ✓
             </div>
 
@@ -650,7 +649,7 @@ export default function AttendancePage() {
                 disabled={isProcessing}
                 onClick={handleBehaviouralVerify}
               >
-                {isProcessing ? <><div className="spinner" /> Verifying…</> : 'Verify Identity ✓'}
+                {isProcessing ? <><div className="spinner" /> Verifying…</> : 'Verify Identity'}
               </button>
             </div>
           </div>

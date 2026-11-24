@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import Sidebar from '../../components/Sidebar'
+import AppShell from '../../components/AppShell'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE } from '../../lib/api'
 
@@ -41,22 +41,12 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
     : 0
 
   return (
-    <div className="app-layout">
-      <Sidebar />
-      <div className="main-content">
-        <header className="page-header">
-          <div>
-            <h2 style={{ margin: 0 }}>{user?.full_name}</h2>
-            <p className="text-muted" style={{ marginTop: '2px', fontSize: 'var(--text-xs)' }}>
-              Lecturer · FaceAttend
-            </p>
-          </div>
-          <span className="badge badge-info">Lecturer</span>
-        </header>
-
-        <div className="page-body fade-in-up">
-
-          {/* ── Metrics: inline row ── */}
+    <AppShell
+      title={user?.full_name}
+      subtitle="Lecturer · FaceAttend"
+      actions={<span className="badge badge-info">Lecturer</span>}
+    >
+      {/* ── Metrics: inline row ── */}
           <div className="metric-row">
             <div className="metric-item">
               <div className="metric-value" style={{ color: 'var(--accent)' }}>
@@ -265,9 +255,6 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
               </p>
             </div>
           )}
-
-        </div>
-      </div>
-    </div>
+    </AppShell>
   )
 }

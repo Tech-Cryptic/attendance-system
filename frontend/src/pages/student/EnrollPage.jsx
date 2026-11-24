@@ -287,8 +287,8 @@ export default function EnrollPage() {
 
   // ── Render ─────────────────────────────────────────────────────
   return (
-    <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: '40px', paddingBottom: '40px' }}>
-      <div style={{ width: '100%', maxWidth: 600, position: 'relative', zIndex: 1 }}>
+    <div className="focus-page">
+      <div className="focus-shell" style={{ maxWidth: 600 }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px', justifyContent: 'center' }}>
           <div className="auth-logo" style={{ margin: 0, width: 44, height: 44 }}>
@@ -471,9 +471,8 @@ export default function EnrollPage() {
             <div style={{
               width: 72, height: 72, borderRadius: '50%', margin: '0 auto 20px',
               background: 'var(--success-bg)', border: '2px solid var(--success)',
-              display: 'grid', placeItems: 'center', fontSize: '32px',
-              boxShadow: '0 0 30px rgba(16,185,129,0.3)',
-            }}>
+               display: 'grid', placeItems: 'center', fontSize: '32px',
+             }}>
               ✓
             </div>
 

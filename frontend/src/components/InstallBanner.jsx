@@ -1,31 +1,31 @@
-/**
- * InstallBanner — PWA "Add to Home Screen" prompt
- *
- * Listens for the `beforeinstallprompt` event (Chrome/Edge/Android).
- * Shows a dismissible banner at the bottom of the screen.
- * Once dismissed, remembers for 7 days in localStorage.
- */
 import { useState, useEffect } from 'react'
 
-const DISMISS_KEY   = 'faceattend_pwa_dismissed'
-const DISMISS_DAYS  = 7
+const DISMISS_KEY = 'faceattend_pwa_dismissed'
+const DISMISS_DAYS = 7
+
+function DownloadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  )
+}
 
 export default function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
-  const [visible, setVisible]               = useState(false)
-  const [installing, setInstalling]         = useState(false)
+  const [visible, setVisible] = useState(false)
+  const [installing, setInstalling] = useState(false)
 
   useEffect(() => {
-    // Don't show if dismissed recently
     const dismissed = localStorage.getItem(DISMISS_KEY)
     if (dismissed && Date.now() - Number(dismissed) < DISMISS_DAYS * 86400000) return
-
-    // Don't show if already installed (standalone mode)
     if (window.matchMedia('(display-mode: standalone)').matches) return
 
-    const handler = (e) => {
-      e.preventDefault()
-      setDeferredPrompt(e)
+    const handler = event => {
+      event.preventDefault()
+      setDeferredPrompt(event)
       setVisible(true)
     }
     window.addEventListener('beforeinstallprompt', handler)
@@ -53,61 +53,17 @@ export default function InstallBanner() {
   if (!visible) return null
 
   return (
-    <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      zIndex: 8888,
-      background: 'rgba(14,14,28,0.96)',
-      borderTop: '1px solid rgba(124,58,237,0.4)',
-      backdropFilter: 'blur(16px)',
-      padding: '16px 20px',
-      display: 'flex', alignItems: 'center', gap: '14px',
-      boxShadow: '0 -4px 24px rgba(0,0,0,0.5)',
-      animation: 'slideUp 0.4s ease',
-    }}>
-      {/* Icon */}
-      <div style={{
-        width: 44, height: 44, borderRadius: '12px', flexShrink: 0,
-        background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-        display: 'grid', placeItems: 'center', fontSize: '22px',
-        boxShadow: '0 0 16px rgba(124,58,237,0.4)',
-      }}>
-        📲
+    <div className="pwa-banner" role="status">
+      <div className="pwa-banner-icon">
+        <DownloadIcon />
       </div>
-
-      {/* Text */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
-          Install FaceAttend
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-          Add to your home screen for fast, offline access
-        </div>
+      <div className="pwa-banner-copy">
+        <strong>Install FaceAttend</strong>
+        <span>Add to your home screen for offline access</span>
       </div>
-
-      {/* Actions */}
-      <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-        <button
-          onClick={handleDismiss}
-          style={{
-            padding: '8px 14px', borderRadius: '8px',
-            background: 'transparent', border: '1px solid var(--border-default)',
-            color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer',
-          }}
-        >
-          Not now
-        </button>
-        <button
-          id="btn-pwa-install"
-          onClick={handleInstall}
-          disabled={installing}
-          style={{
-            padding: '8px 18px', borderRadius: '8px',
-            background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-            border: 'none', color: '#fff',
-            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-            boxShadow: '0 0 12px rgba(124,58,237,0.4)',
-          }}
-        >
+      <div className="pwa-banner-actions">
+        <button type="button" className="btn btn-ghost btn-sm" onClick={handleDismiss}>Not now</button>
+        <button id="btn-pwa-install" type="button" className="btn btn-primary btn-sm" onClick={handleInstall} disabled={installing}>
           {installing ? 'Installing…' : 'Install'}
         </button>
       </div>

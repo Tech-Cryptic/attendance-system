@@ -147,9 +147,9 @@ export default function BatchScanPage() {
       const [x, y, w, h] = box
 
       // Colour by confidence band
-      const color = matchResult.band === 'high'      ? '#22c55e'   // green
-                  : matchResult.band === 'uncertain' ? '#f59e0b'   // amber
-                  : '#6b7280'                                        // grey = no match
+      const color = matchResult.band === 'high'      ? '#166534'
+                  : matchResult.band === 'uncertain' ? '#92400e'
+                  : '#6b7280'
 
       // Bounding box
       ctx.strokeStyle = color
@@ -295,16 +295,16 @@ export default function BatchScanPage() {
         {status === 'loading' && (
           <div style={styles.overlay}>
             <div style={styles.spinner} />
-            <p>Loading AI models…</p>
+            <p style={{ color: '#ffffff', fontWeight: 600 }}>Loading face model…</p>
           </div>
         )}
 
         {status === 'ready' && (
           <div style={styles.overlay}>
             <button onClick={startScanning} style={styles.startBtn}>
-              ▶ Start Scanning
+              Start Scanning
             </button>
-            <p style={{ color: '#94a3b8', marginTop: 8 }}>
+            <p style={{ color: '#c8d1cb', marginTop: 8 }}>
               Direct students to step up in groups of up to 15
             </p>
           </div>
@@ -318,9 +318,9 @@ export default function BatchScanPage() {
           <div style={styles.faceGrid}>
             {detectedFaces.map((f, i) => {
               const m = f.matchResult
-              const color = m.band === 'high' ? '#22c55e'
-                          : m.band === 'uncertain' ? '#f59e0b'
-                          : '#6b7280'
+              const color = m.band === 'high' ? 'var(--success)'
+                          : m.band === 'uncertain' ? 'var(--warning)'
+                          : 'var(--text-muted)'
               return (
                 <div key={i} style={{ ...styles.faceChip, borderColor: color }}>
                   <span style={{ color, fontWeight: 700 }}>
@@ -335,10 +335,10 @@ export default function BatchScanPage() {
           </div>
           <div style={styles.scanControls}>
             <button onClick={confirmGroup} style={styles.confirmBtn}>
-              ✓ Add Group to Batch
+              Add Group to Batch
             </button>
             <button onClick={stopScanning} style={styles.stopBtn}>
-              ■ Stop
+              Stop
             </button>
           </div>
         </div>
@@ -356,8 +356,8 @@ export default function BatchScanPage() {
                 <span style={styles.matchName}>{m.full_name}</span>
                 <span style={{
                   ...styles.matchBand,
-                  background: m.confidence_band === 'high' ? '#16a34a22' : '#d9770622',
-                  color:      m.confidence_band === 'high' ? '#16a34a'   : '#d97706',
+                  background: m.confidence_band === 'high' ? 'var(--success-bg)' : 'var(--warning-bg)',
+                  color:      m.confidence_band === 'high' ? 'var(--success)'   : 'var(--warning)',
                 }}>
                   {m.confidence_band === 'high' ? 'High' : 'Uncertain'}
                 </span>
@@ -382,9 +382,9 @@ export default function BatchScanPage() {
         <div style={styles.doneSection}>
           <h3 style={styles.sectionTitle}>Scan Complete</h3>
           <div style={styles.statRow}>
-            <Stat label="Matched" value={sessionStatus.matched?.length ?? 0} color="#22c55e" />
-            <Stat label="Unmatched" value={sessionStatus.unmatched?.length ?? 0} color="#f59e0b" />
-            <Stat label="Total Enrolled" value={sessionStatus.total_enrolled ?? 0} color="#94a3b8" />
+            <Stat label="Matched" value={sessionStatus.matched?.length ?? 0} color="var(--success)" />
+            <Stat label="Unmatched" value={sessionStatus.unmatched?.length ?? 0} color="var(--warning)" />
+            <Stat label="Total Enrolled" value={sessionStatus.total_enrolled ?? 0} color="var(--text-muted)" />
           </div>
 
           {sessionStatus.unmatched?.length > 0 && !fallbackDone && (
@@ -403,7 +403,7 @@ export default function BatchScanPage() {
                 disabled={fallbackReleasing}
                 style={styles.fallbackBtn}
               >
-                {fallbackReleasing ? 'Releasing…' : '📱 Release Fallback QR (15 min window)'}
+                {fallbackReleasing ? 'Releasing…' : 'Release Fallback QR (15 min window)'}
               </button>
             </div>
           )}
@@ -441,57 +441,55 @@ function Stat({ label, value, color }) {
 const styles = {
   page: {
     minHeight: '100dvh',
-    background: '#0f172a',
-    color: '#f1f5f9',
-    fontFamily: 'Inter, sans-serif',
+    background: 'var(--bg-base)',
+    color: 'var(--text-primary)',
+    fontFamily: 'var(--font-sans)',
     display: 'flex',
     flexDirection: 'column',
-    gap: 0,
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     gap: 16,
     padding: '16px 20px',
-    background: '#1e293b',
-    borderBottom: '1px solid #334155',
+    background: 'var(--bg-surface)',
+    borderBottom: '1px solid var(--border-default)',
   },
   backBtn: {
-    background: 'none',
-    border: '1px solid #334155',
-    color: '#94a3b8',
-    borderRadius: 8,
+    background: 'var(--bg-subtle)',
+    border: '1px solid var(--border-default)',
+    color: 'var(--text-secondary)',
+    borderRadius: 'var(--radius-md)',
     padding: '6px 12px',
     cursor: 'pointer',
     fontSize: 13,
   },
-  title: { margin: 0, fontSize: 18, fontWeight: 700, color: '#f1f5f9' },
-  subtitle: { margin: 0, fontSize: 12, color: '#64748b' },
+  title: { margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' },
+  subtitle: { margin: 0, fontSize: 12, color: 'var(--text-muted)' },
   scanBadge: {
     marginLeft: 'auto',
     display: 'flex',
     alignItems: 'center',
     gap: 6,
-    background: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: 20,
+    background: 'var(--bg-subtle)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-full)',
     padding: '4px 12px',
     fontSize: 12,
     fontWeight: 600,
-    color: '#94a3b8',
+    color: 'var(--text-secondary)',
   },
   liveDot: {
     width: 8,
     height: 8,
     borderRadius: '50%',
-    background: '#22c55e',
-    animation: 'pulse 1.2s infinite',
+    background: 'var(--success)',
   },
   cameraWrap: {
     position: 'relative',
     width: '100%',
     aspectRatio: '16/9',
-    background: '#000',
+    background: '#111714',
     overflow: 'hidden',
   },
   video: {
@@ -514,22 +512,22 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'rgba(15,23,42,0.75)',
+    background: 'rgba(24, 30, 27, 0.78)',
   },
   spinner: {
     width: 40,
     height: 40,
-    border: '3px solid #334155',
-    borderTop: '3px solid #7c3aed',
+    border: '3px solid rgba(255,255,255,0.28)',
+    borderTop: '3px solid #ffffff',
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
     marginBottom: 12,
   },
   startBtn: {
-    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-    color: '#fff',
+    background: 'var(--accent)',
+    color: 'var(--text-inverse)',
     border: 'none',
-    borderRadius: 12,
+    borderRadius: 'var(--radius-md)',
     padding: '14px 32px',
     fontSize: 16,
     fontWeight: 700,
@@ -537,13 +535,14 @@ const styles = {
   },
   liveList: {
     padding: '16px 20px',
-    borderBottom: '1px solid #1e293b',
+    background: 'var(--bg-surface)',
+    borderBottom: '1px solid var(--border-default)',
   },
   sectionTitle: {
     margin: '0 0 12px',
     fontSize: 14,
     fontWeight: 600,
-    color: '#94a3b8',
+    color: 'var(--text-muted)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
   },
@@ -558,36 +557,37 @@ const styles = {
     alignItems: 'center',
     gap: 8,
     padding: '6px 12px',
-    background: '#1e293b',
+    background: 'var(--bg-surface)',
     border: '1.5px solid',
-    borderRadius: 20,
+    borderRadius: 'var(--radius-full)',
     fontSize: 13,
   },
-  chipName: { color: '#e2e8f0', fontSize: 12 },
+  chipName: { color: 'var(--text-primary)', fontSize: 12 },
   scanControls: { display: 'flex', gap: 12 },
   confirmBtn: {
     flex: 1,
-    background: 'linear-gradient(135deg, #16a34a, #15803d)',
-    color: '#fff',
+    background: 'var(--success)',
+    color: 'var(--text-inverse)',
     border: 'none',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-md)',
     padding: '12px',
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
   },
   stopBtn: {
-    background: '#1e293b',
-    color: '#94a3b8',
-    border: '1px solid #334155',
-    borderRadius: 10,
+    background: 'var(--bg-subtle)',
+    color: 'var(--text-secondary)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-md)',
     padding: '12px 20px',
     fontSize: 14,
     cursor: 'pointer',
   },
   matchedSection: {
     padding: '16px 20px',
-    borderBottom: '1px solid #1e293b',
+    background: 'var(--bg-surface)',
+    borderBottom: '1px solid var(--border-default)',
   },
   matchList: {
     display: 'flex',
@@ -602,23 +602,24 @@ const styles = {
     alignItems: 'center',
     gap: 10,
     padding: '8px 12px',
-    background: '#1e293b',
-    borderRadius: 8,
+    background: 'var(--bg-subtle)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 'var(--radius-md)',
   },
-  matchName: { flex: 1, fontSize: 13, color: '#e2e8f0' },
+  matchName: { flex: 1, fontSize: 13, color: 'var(--text-primary)' },
   matchBand: {
     fontSize: 11,
     fontWeight: 600,
     padding: '2px 8px',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-full)',
   },
-  matchDist: { fontSize: 12, color: '#64748b' },
+  matchDist: { fontSize: 12, color: 'var(--text-muted)' },
   submitBtn: {
     width: '100%',
-    background: 'linear-gradient(135deg, #7c3aed, #4f46e5)',
-    color: '#fff',
+    background: 'var(--accent)',
+    color: 'var(--text-inverse)',
     border: 'none',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-md)',
     padding: '14px',
     fontSize: 15,
     fontWeight: 700,
@@ -626,6 +627,7 @@ const styles = {
   },
   doneSection: {
     padding: '20px',
+    background: 'var(--bg-surface)',
   },
   statRow: {
     display: 'flex',
@@ -634,51 +636,52 @@ const styles = {
   },
   statBox: {
     flex: 1,
-    background: '#1e293b',
-    borderRadius: 12,
+    background: 'var(--bg-subtle)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 'var(--radius-md)',
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     gap: 4,
   },
-  statNum: { fontSize: 28, fontWeight: 800 },
-  statLabel: { fontSize: 12, color: '#64748b' },
+  statNum: { fontSize: 28, fontWeight: 700 },
+  statLabel: { fontSize: 12, color: 'var(--text-muted)' },
   fallbackBox: {
-    background: '#1e293b',
-    border: '1px solid #f59e0b44',
-    borderRadius: 12,
+    background: 'var(--warning-bg)',
+    border: '1px solid var(--warning-border)',
+    borderRadius: 'var(--radius-md)',
     padding: '16px',
     marginBottom: 16,
   },
-  fallbackText: { margin: '0 0 8px', fontSize: 14, color: '#fbbf24' },
-  fallbackSub: { margin: '0 0 12px', fontSize: 12, color: '#64748b' },
+  fallbackText: { margin: '0 0 8px', fontSize: 14, color: 'var(--warning)' },
+  fallbackSub: { margin: '0 0 12px', fontSize: 12, color: 'var(--text-secondary)' },
   fallbackBtn: {
     width: '100%',
-    background: '#f59e0b',
-    color: '#0f172a',
+    background: 'var(--warning)',
+    color: 'var(--text-inverse)',
     border: 'none',
-    borderRadius: 10,
+    borderRadius: 'var(--radius-md)',
     padding: '12px',
     fontSize: 14,
     fontWeight: 700,
     cursor: 'pointer',
   },
   fallbackSuccess: {
-    background: '#16a34a22',
-    border: '1px solid #16a34a44',
-    borderRadius: 10,
+    background: 'var(--success-bg)',
+    border: '1px solid var(--success-border)',
+    borderRadius: 'var(--radius-md)',
     padding: '12px 16px',
     fontSize: 13,
-    color: '#4ade80',
+    color: 'var(--success)',
     marginBottom: 16,
   },
   doneBtn: {
     width: '100%',
-    background: '#1e293b',
-    color: '#94a3b8',
-    border: '1px solid #334155',
-    borderRadius: 10,
+    background: 'var(--bg-subtle)',
+    color: 'var(--text-secondary)',
+    border: '1px solid var(--border-default)',
+    borderRadius: 'var(--radius-md)',
     padding: '12px',
     fontSize: 14,
     cursor: 'pointer',

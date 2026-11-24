@@ -176,7 +176,7 @@ const FaceCamera = forwardRef(function FaceCamera({
   // ── Status bar content ────────────────────────────────────────
   const statusText = (() => {
     if (modelState === 'loading') {
-      return `Loading AI models… ${Math.round(loadProgress * 100)}%`
+      return `Loading face model… ${Math.round(loadProgress * 100)}%`
     }
     if (modelState === 'error')  return 'Model failed to load'
     if (cameraState === 'error') return 'Camera access denied'
@@ -198,7 +198,7 @@ const FaceCamera = forwardRef(function FaceCamera({
     : ''
 
   return (
-    <div className={`face-camera-container ${className}`} style={{ position: 'relative', overflow: 'hidden', borderRadius: '16px' }}>
+    <div className={`face-camera-container ${className}`} style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
       {/* Video feed */}
       <video
         ref={videoRef}
@@ -227,25 +227,25 @@ const FaceCamera = forwardRef(function FaceCamera({
       {/* Model loading overlay */}
       {modelState === 'loading' && (
         <div style={{
-          position: 'absolute', inset: 0, background: 'rgba(8,8,16,0.85)',
+          position: 'absolute', inset: 0, background: 'rgba(24,30,27,0.92)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: '16px', backdropFilter: 'blur(4px)',
+          gap: '14px',
         }}>
           <div className="spinner spinner-lg" />
-          <p style={{ color: 'var(--text-primary)', fontSize: '14px' }}>
-            Loading AI models… {Math.round(loadProgress * 100)}%
+          <p style={{ color: '#ffffff', fontSize: '14px', fontWeight: 600 }}>
+            Loading face model… {Math.round(loadProgress * 100)}%
           </p>
-          <div className="progress-track" style={{ width: '200px' }}>
-            <div className="progress-fill" style={{ width: `${loadProgress * 100}%` }} />
+          <div className="progress-track" style={{ width: '200px', background: 'rgba(255,255,255,0.25)' }}>
+            <div className="progress-fill" style={{ width: `${loadProgress * 100}%`, background: '#ffffff' }} />
           </div>
-          <p className="text-xs text-muted">First load may take ~15s. Cached offline after.</p>
+          <p style={{ color: '#c8d1cb', fontSize: '12px' }}>First load may take about 15 seconds. Cached offline after.</p>
         </div>
       )}
 
       {/* Status bar */}
       <div className="camera-status-bar">
-        <span style={{ color: 'var(--text-primary)', fontSize: '13px' }}>{statusText}</span>
-        <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+        <span style={{ color: '#ffffff', fontSize: '13px' }}>{statusText}</span>
+        <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#c8d1cb' }}>
           {confidenceText && <span>{confidenceText}</span>}
           {antispoofText  && <span>{antispoofText}</span>}
         </div>
@@ -255,10 +255,10 @@ const FaceCamera = forwardRef(function FaceCamera({
       {livenessStatus && !livenessStatus.passed && (
         <div style={{
           position: 'absolute', top: '12px', right: '12px',
-          background: 'rgba(8,8,16,0.8)', borderRadius: '20px',
+          background: 'rgba(16,22,20,0.92)', borderRadius: 'var(--radius-full)',
           padding: '4px 12px', fontSize: '12px', fontWeight: 600,
-          color: livenessStatus.passed ? 'var(--success)' : 'var(--warning)',
-          backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.1)',
+          color: livenessStatus.passed ? '#b7e2c8' : '#e8d4ad',
+          border: '1px solid rgba(255,255,255,0.18)',
           display: 'flex', alignItems: 'center', gap: '6px',
         }}>
           <span>{livenessStatus.blinkCount}/{livenessStatus.required} blinks</span>
@@ -291,14 +291,10 @@ function drawFaceMeshOverlay(ctx, result, canvasW) {
 
   ctx.strokeStyle = boxColor
   ctx.lineWidth = 2
-  ctx.shadowColor = boxColor
-  ctx.shadowBlur = 12
-  ctx.strokeRect(canvasW - bx - bw, by, bw, bh)  // mirror flip for scaleX(-1) canvas
-  ctx.shadowBlur = 0
+  ctx.strokeRect(canvasW - bx - bw, by, bw, bh)
 
-  // Draw simplified face mesh — only key feature groups for visual clarity
   if (!result.annotations) return
-  ctx.strokeStyle = 'rgba(124, 58, 237, 0.45)'
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.42)'
   ctx.lineWidth = 1
 
   const landmarkGroups = [
@@ -325,9 +321,8 @@ function drawFaceMeshOverlay(ctx, result, canvasW) {
     ctx.stroke()
   }
 
-  // Iris overlay — cyan dots for iris landmarks
   const irisGroups = [result.annotations.leftIris, result.annotations.rightIris].filter(Boolean)
-  ctx.fillStyle = 'rgba(6, 182, 212, 0.7)'
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'
   for (const iris of irisGroups) {
     for (const [x, y] of iris) {
       ctx.beginPath()
@@ -340,7 +335,7 @@ function drawFaceMeshOverlay(ctx, result, canvasW) {
 // ── Scanning Corner Brackets SVG ──────────────────────────────
 
 function ScanBrackets({ active }) {
-  const color = active ? 'rgba(124, 58, 237, 0.7)' : 'rgba(255,255,255,0.1)'
+  const color = active ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255,255,255,0.18)'
   const style = {
     position: 'absolute',
     width: 40, height: 40,

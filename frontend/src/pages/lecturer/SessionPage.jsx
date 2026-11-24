@@ -137,7 +137,7 @@ export default function SessionPage() {
       const qrContent = JSON.stringify({ payload: data.qr_payload, signature: data.qr_signature })
       const url = await QRCode.toDataURL(qrContent, {
         width: 400, margin: 2,
-        color: { dark: '#0a0a1a', light: '#ffffff' },
+        color: { dark: '#17211f', light: '#ffffff' },
         errorCorrectionLevel: 'M',
       })
       setQrDataURL(url)
@@ -169,7 +169,7 @@ export default function SessionPage() {
       const content = JSON.stringify({ payload: data.qr_payload, signature: data.qr_signature })
       const url = await QRCode.toDataURL(content, {
         width: 320, margin: 2,
-        color: { dark: '#0a0a1a', light: '#ffffff' },
+        color: { dark: '#17211f', light: '#ffffff' },
         errorCorrectionLevel: 'M',
       })
       setCheckpointQr({ url, eventType, label: data.label ?? eventType })
@@ -215,8 +215,8 @@ export default function SessionPage() {
 
   // ── Render ────────────────────────────────────────────────────
   return (
-    <div className="auth-page" style={{ alignItems: 'flex-start', paddingTop: '32px' }}>
-      <div style={{ width: '100%', maxWidth: 700, zIndex: 1 }}>
+    <div className="focus-page">
+      <div className="focus-shell" style={{ maxWidth: 700 }}>
 
         {/* Back link */}
         <Link to="/lecturer" className="btn btn-ghost btn-sm" style={{ marginBottom: '20px', display: 'inline-flex' }}>
@@ -227,7 +227,7 @@ export default function SessionPage() {
         {!session && (
           <div className="card fade-in-up">
             <div style={{ marginBottom: '24px' }}>
-              <h2 style={{ margin: 0 }}>📡 Start Attendance Session</h2>
+              <h2 style={{ margin: 0 }}>Start Attendance Session</h2>
               <p className="text-secondary text-sm" style={{ marginTop: '6px' }}>
                 Select a course and duration. A signed QR code will appear for students to scan.
               </p>
@@ -310,7 +310,7 @@ export default function SessionPage() {
                     className={`btn btn-sm ${extendedMode ? 'btn-primary' : 'btn-ghost'}`}
                     style={{ borderColor: extendedMode ? 'var(--warning)' : undefined, color: extendedMode ? 'var(--warning)' : undefined }}
                   >
-                    {extendedMode ? '⏱ Extended Mode ON' : '⏱ Enable Extended Mode'}
+                    {extendedMode ? 'Extended Mode On' : 'Enable Extended Mode'}
                   </button>
                   <span className="text-xs text-muted">For special occasions only — requires lecturer override</span>
                 </div>
@@ -330,7 +330,7 @@ export default function SessionPage() {
                 disabled={creating || courses.length === 0}
                 style={{ marginTop: '8px' }}
               >
-                {creating ? <><div className="spinner" /> Creating session…</> : '📡 Start Session & Generate QR'}
+                {creating ? <><div className="spinner" /> Creating session…</> : 'Start Session & Generate QR'}
               </button>
             </form>
           </div>

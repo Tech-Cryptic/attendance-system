@@ -4,7 +4,6 @@ import { lazy, Suspense } from 'react'
 import { ToastContainer } from './components/Toast'
 import InstallBanner from './components/InstallBanner'
 import UpdateBanner  from './components/UpdateBanner'
-import './index.css'
 
 // ── Lazy-loaded pages (code-split for performance) ─────────────
 const LoginPage         = lazy(() => import('./pages/auth/LoginPage'))
@@ -27,15 +26,13 @@ function PageSpinner() {
       justifyContent: 'center', gap: '16px',
       background: 'var(--bg-base)',
     }}>
-      {/* Animated brand logo */}
-      <div style={{
-        width: 56, height: 56, borderRadius: '16px',
-        background: 'linear-gradient(135deg,#4f46e5,#7c3aed,#06b6d4)',
-        display: 'grid', placeItems: 'center', fontSize: '24px',
-        boxShadow: '0 0 30px rgba(124,58,237,0.4)',
-        animation: 'pulse 1.5s ease infinite',
-      }}>
-        😊
+      <div className="auth-logo" style={{ width: 56, height: 56, margin: 0 }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+          <line x1="9" y1="9" x2="9.01" y2="9" />
+          <line x1="15" y1="9" x2="15.01" y2="9" />
+        </svg>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div className="spinner" />

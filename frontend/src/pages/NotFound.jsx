@@ -2,9 +2,9 @@ import { Link } from 'react-router-dom'
 
 export default function NotFound() {
   return (
-    <div className="auth-page">
-      <div className="auth-card fade-in-up text-center">
-        <div style={{ fontSize: '64px', marginBottom: '8px', fontWeight: 800, background: 'var(--brand-gradient)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+    <div className="focus-page">
+      <div className="focus-card fade-in-up text-center">
+        <div style={{ fontSize: '56px', marginBottom: 'var(--sp-2)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.06em' }}>
           404
         </div>
         <h2>Page Not Found</h2>

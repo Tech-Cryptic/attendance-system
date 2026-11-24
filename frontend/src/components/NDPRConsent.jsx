@@ -37,7 +37,7 @@ export default function NDPRConsent({ onAccept, onDecline }) {
         <div className="modal-header" style={{ marginBottom: '16px' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--warning)', textTransform: 'uppercase', marginBottom: '4px' }}>
-              ⚖️ Legal Consent Required
+              Legal Consent Required
             </div>
             <h3 style={{ margin: 0 }}>Nigeria Data Protection Regulation 2019</h3>
             <p className="text-sm text-muted" style={{ marginTop: '4px' }}>

@@ -23,22 +23,20 @@ export const toast = {
 }
 
 const ICONS = { success: '✓', error: '!', info: 'i', warning: '!' }
-const COLORS = {
-  success: { bg: 'var(--success-bg)', border: 'var(--success)', text: 'var(--success)' },
-  error:   { bg: 'var(--danger-bg)',  border: 'var(--danger)',  text: 'var(--danger)'  },
-  info:    { bg: 'var(--accent-muted)', border: 'var(--accent)', text: 'var(--accent)'  },
-  warning: { bg: 'var(--warning-bg)', border: 'var(--warning)', text: 'var(--warning)' },
-}
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState([])
   const counter = useRef(0)
 
+  const removeToast = useCallback(id => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
   const addToast = useCallback(({ msg, type = 'info', duration = 4000 }) => {
     const id = ++counter.current
-    setToasts(prev => [...prev.slice(-4), { id, msg, type }])   // max 5 at once
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration)
-  }, [])
+    setToasts(prev => [...prev.slice(-4), { id, msg, type }])
+    setTimeout(() => removeToast(id), duration)
+  }, [removeToast])
 
   useEffect(() => {
     _addToast = addToast
@@ -48,33 +46,21 @@ export function ToastContainer() {
   if (!toasts.length) return null
 
   return createPortal(
-    <div style={{
-      position: 'fixed', bottom: 24, right: 24,
-      zIndex: 9999,
-      display: 'flex', flexDirection: 'column', gap: '10px',
-      pointerEvents: 'none',
-    }}>
-      {toasts.map(t => {
-        const c = COLORS[t.type] ?? COLORS.info
-        return (
-          <div key={t.id} style={{
-            display: 'flex', alignItems: 'flex-start', gap: '10px',
-            background: c.bg,
-            border: `1px solid ${c.border}`,
-            borderRadius: '12px',
-            padding: '12px 16px',
-            backdropFilter: 'blur(12px)',
-            boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
-            maxWidth: 340, minWidth: 220,
-            pointerEvents: 'auto',
-            animation: 'fadeInUp 0.3s ease',
-            fontSize: '13px', lineHeight: 1.5,
-          }}>
-            <span style={{ flexShrink: 0, fontSize: '16px' }}>{ICONS[t.type]}</span>
-            <span style={{ color: 'var(--text-primary)', flex: 1 }}>{t.msg}</span>
-          </div>
-        )
-      })}
+    <div className="toast-container" role="status" aria-live="polite">
+      {toasts.map(t => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span style={{ flexShrink: 0, fontWeight: 700 }}>{ICONS[t.type]}</span>
+          <span style={{ color: 'var(--text-primary)', flex: 1 }}>{t.msg}</span>
+          <button
+            type="button"
+            className="modal-close-btn"
+            aria-label="Dismiss notification"
+            onClick={() => removeToast(t.id)}
+          >
+            ×
+          </button>
+        </div>
+      ))}
     </div>,
     document.body
   )
