@@ -47,15 +47,7 @@ def sign_checkpoint_payload(
     nonce: str,
     expires_at: str,
 ) -> dict:
-    """
-    Sign a short-lived checkpoint QR.
-
-    Teaching note:
-    The original session QR answers "did the student join this session?".
-    A checkpoint QR answers "was the student still here at time T?". Adding
-    a random nonce to the signed payload means an old screenshot cannot be
-    replayed forever: the server stores every accepted nonce.
-    """
+    """Sign a short-lived checkpoint QR with a single-use nonce."""
     payload = {
         "session_id":   session_id,
         "course_code":  course_code,

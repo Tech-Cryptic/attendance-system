@@ -1,12 +1,4 @@
-"""
-LLM-assisted presence review.
-
-Teaching note:
-This is the narrowest useful LLM integration for the attendance domain. The
-model reads evidence that the rule engine could not resolve, returns a strict
-JSON object, and suggests an outcome plus a draft message. It never writes the
-authoritative outcome; a lecturer or admin must approve or override it.
-"""
+"""Advisory LLM review for evidence the policy engine cannot resolve."""
 
 import json
 import os
@@ -65,8 +57,7 @@ def fallback_suggestion(context: dict[str, Any]) -> LLMReviewSuggestion:
     """
     Deterministic review used when the LLM is unavailable or invalid.
 
-    This is intentionally conservative: a broken external service must never
-    turn ambiguous evidence into a failing attendance outcome.
+    A model failure must not produce a failing attendance outcome.
     """
     evidence = context.get('evidence') or {}
     reasons = [str(r) for r in (evidence.get('review_reasons') or []) if r]

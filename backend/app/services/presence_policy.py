@@ -1,25 +1,7 @@
-"""
-Presence policy engine — pure, testable decision logic.
+"""Pure policy evaluation for presence evidence.
 
-Teaching note:
-This module deliberately has NO database or FastAPI imports. It takes plain
-dictionaries and returns a plain dictionary. That makes the most important
-business rule in the project easy to unit-test without PostgreSQL, JWTs, or a
-running server.
-
-Core idea:
-    evidence != outcome
-
-A phone can report many things (QR scans, GPS, Wi-Fi, BLE, explicit leave).
-None of them is trusted blindly. The server first records the evidence, then
-this engine turns it into one authoritative outcome:
-
-    present | left_early | absent | exempted | pending_review
-
-"offline-first" means the device may record evidence with no network. It does
-NOT mean the device decides the final result. Finality belongs to the server,
-which is the only component that knows the real session times, enrolments,
-revocations, and late-arrival grace rules.
+Devices record evidence; the server resolves it to one of `present`,
+`left_early`, `absent`, `exempted`, or `pending_review`.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -44,13 +26,7 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """
-    Great-circle distance in metres.
-
-    GPS is an advisory signal here. Wi-Fi/BLE are usually better indoors.
-    We still keep the maths simple and explicit because this function is the
-    only place where geographic proximity is converted into a boolean.
-    """
+    """Great-circle distance in metres."""
     r = 6371000.0
     p1, p2 = radians(lat1), radians(lat2)
     dp = radians(lat2 - lat1)
@@ -111,25 +87,7 @@ def evaluate_presence(
     batch_scanned_at: Optional[datetime] = None,
     now: Optional[datetime] = None,
 ) -> dict:
-    """
-    Turn raw evidence into an attendance outcome.
-
-    Rule summary (v1):
-      1. An active manual exemption wins and is audited as `exempted`.
-      2. A signed QR check-in is required.
-      3. Continuity is satisfied by EITHER:
-         - enough accepted QR checkpoints, OR
-         - venue signals spanning the lecture (GPS / Wi-Fi / BLE).
-      4. End confirmation is satisfied by a check-out QR, a late batch scan,
-         or the same venue-continuity proof from step 3.
-      5. An explicit leave event, or a final out-of-venue signal, means
-         `left_early`.
-      6. Anything ambiguous goes to `pending_review`, never straight to a
-         destructive null/fail. This is the "grace then review" choice.
-
-    The rules are OR-based deliberately. If one sensor fails (dead phone,
-    Wi-Fi off, GPS denied), another valid signal can still prove presence.
-    """
+    """Turn accepted evidence into one attendance outcome."""
     now = _as_utc(now) or datetime.now(timezone.utc)
     session_start = _as_utc(session_start)
     session_end = _as_utc(session_end)

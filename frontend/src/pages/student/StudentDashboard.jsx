@@ -31,7 +31,7 @@ export default function StudentDashboard() {
           setAttendance(data)
           buildCourseStats(data)
         }
-      } catch {}
+      } catch { setAttendance([]); setCourseStats([]) }
       finally { setLoading(false) }
     }
 
@@ -57,7 +57,7 @@ export default function StudentDashboard() {
             }
           }
         }
-      } catch {}
+      } catch { setFallbackSessions([]) }
     }
 
     if (token) {
@@ -104,7 +104,7 @@ export default function StudentDashboard() {
         const res2 = await fetch(`${API_BASE}/student/attendance`, { headers: authHeaders(token) })
         if (res2.ok) setAttendance(await res2.json())
       }
-    } catch {}
+    } catch { return }
   }
 
   const totalSessions   = attendance.length

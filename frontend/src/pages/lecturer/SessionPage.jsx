@@ -318,7 +318,7 @@ export default function SessionPage() {
                 {/* Policy note */}
                 <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--accent-muted)', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
                   <p className="text-xs text-muted" style={{ margin: 0 }}>
-                    📋 <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
+                    <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
                   </p>
                 </div>
               </div>
@@ -348,7 +348,7 @@ export default function SessionPage() {
                     {session.course_code}
                   </div>
                   <h3 style={{ margin: 0 }}>
-                    {isExpired ? '⏰ Session Expired' : (session.active ? '🟢 Session Active' : '🔴 Session Ended')}
+                    {isExpired ? 'Session Expired' : (session.active ? 'Session Active' : 'Session Ended')}
                   </h3>
                   <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
                     {attendance.length} student{attendance.length !== 1 ? 's' : ''} marked attendance
@@ -400,7 +400,7 @@ export default function SessionPage() {
                     className="btn btn-ghost btn-sm"
                     id="btn-download-session-qr"
                   >
-                    📥 Download QR
+                    Download QR
                   </a>
                 )}
                 <span className="btn btn-ghost btn-sm font-mono" style={{ cursor: 'default', fontSize: '11px' }}>
@@ -475,7 +475,7 @@ export default function SessionPage() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
                 <h4 style={{ margin: 0 }}>
-                  ✅ Attendance ({attendance.length})
+                  Attendance ({attendance.length})
                 </h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <div className="sync-dot online" />
@@ -487,7 +487,6 @@ export default function SessionPage() {
 
               {attendance.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: '14px' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>👁</div>
                   Waiting for students to mark attendance…
                 </div>
               ) : (

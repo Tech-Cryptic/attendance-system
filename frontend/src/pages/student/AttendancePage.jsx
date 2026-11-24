@@ -39,7 +39,6 @@ export default function AttendancePage() {
   const [rppgStatus,     setRppgStatus]     = useState(null)
 
   // Step 2 — Capture & match
-  const [embeddings,    setEmbeddings]   = useState([])  // captured this session
   const [matchResult,   setMatchResult]  = useState(null)
   const [matchError,    setMatchError]   = useState('')
   const [captureCount,  setCaptureCount] = useState(0)
@@ -120,7 +119,7 @@ export default function AttendancePage() {
 
     scanner.render(
       (text) => handleQRSuccess(text, scanner),
-      (err) => { /* per-frame errors — ignore */ }
+      () => undefined
     )
     scannerRef.current = scanner
 
@@ -146,14 +145,6 @@ export default function AttendancePage() {
         return
       }
 
-      /*
-       * Teaching note:
-       * Two kinds of QR can reach this scanner.
-       *   - Session QR → check-in, then the face/liveness flow runs.
-       *   - Checkpoint / check-out QR → continuity proof only. No face scan is
-       *     needed; the important thing is recording the event locally NOW and
-       *     syncing it later when the network returns.
-       */
       await queueQrPresenceEvent({
         payload,
         signature,
@@ -171,7 +162,7 @@ export default function AttendancePage() {
       setSessionData({ session_id, course_code, expires_at, qr_payload: payload, qr_signature: signature })
       setScanError('')
       setStep(1) // → Liveness
-    } catch (e) {
+    } catch {
       setScanError('Invalid QR code. Please scan the lecturer\'s QR.')
     }
   }
@@ -219,8 +210,6 @@ export default function AttendancePage() {
             await new Promise(r => setTimeout(r, 300))
           }
         }
-        setEmbeddings(captured)
-
         // 2. Load course embeddings (Dexie first, then backend)
         const courseEmbeddings = await loadCourseEmbeddings(sessionData.course_code)
 
@@ -392,7 +381,6 @@ export default function AttendancePage() {
     setMatchError('')
     setCaptureCount(0)
     setIsProcessing(false)
-    setEmbeddings([])
     setScanError('')
     setTempCheckinPayload(null)
     setTypedText('')
@@ -483,7 +471,7 @@ export default function AttendancePage() {
           <div className="card fade-in-up">
             <div style={{ marginBottom: '12px' }}>
               <div className="badge badge-brand" style={{ marginBottom: '6px' }}>{sessionData?.course_code}</div>
-              <h3 style={{ margin: 0 }}>👁 Liveness Check</h3>
+              <h3 style={{ margin: 0 }}>Liveness Check</h3>
               <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
                 Look at the camera and blink twice to prove you're present.
               </p>
@@ -500,7 +488,7 @@ export default function AttendancePage() {
             {livenessStatus?.failed && (
               <button className="btn btn-ghost btn-full" style={{ marginTop: '12px' }}
                 onClick={() => faceCamRef.current?.resetLiveness()}>
-                🔄 Retry Liveness
+                Retry Liveness
               </button>
             )}
           </div>
@@ -509,7 +497,7 @@ export default function AttendancePage() {
         {/* ── STEP 2: Capture & Match ── */}
         {step === 2 && (
           <div className="card fade-in-up">
-            <h3 style={{ margin: '0 0 8px' }}>🔍 Verifying Identity</h3>
+            <h3 style={{ margin: '0 0 8px' }}>Verifying Identity</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               Hold still while we capture and match your face.
             </p>
@@ -550,7 +538,7 @@ export default function AttendancePage() {
               display: 'grid', placeItems: 'center', fontSize: '32px',
               boxShadow: '0 0 30px rgba(16,185,129,0.3)',
             }}>
-              ✅
+              ✓
             </div>
 
             <h2 style={{ marginBottom: '6px' }}>Attendance Marked!</h2>
@@ -584,7 +572,7 @@ export default function AttendancePage() {
 
             {!isOnline && pendingCount > 0 && (
               <div className="alert alert-warning text-sm" style={{ marginBottom: '16px', textAlign: 'left' }}>
-                📶 You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
+                You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
               </div>
             )}
 
@@ -598,7 +586,7 @@ export default function AttendancePage() {
         {/* ── STEP 5: Behavioral Verification ── */}
         {step === 5 && matchResult && (
           <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '8px' }}>⚠️ Behavioral Verification Required</h3>
+            <h3 style={{ marginBottom: '8px' }}>Behavioral Verification Required</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               We detected look-alike matches. Please trace a circle inside the target box and type your matriculation number below to verify your identity.
             </p>
@@ -628,7 +616,7 @@ export default function AttendancePage() {
                 }}
               >
                 <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
-                  Draw a circle or path here 🔄
+                  Draw a circle or path here
                 </span>
               </div>
             </div>

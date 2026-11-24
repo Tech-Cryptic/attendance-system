@@ -3,15 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE } from '../../lib/api'
 
-/**
- * ExemptionClaimPage — any-device claim flow.
- *
- * Teaching note:
- * The URL token is a capability, but the JWT is the identity. ProtectedRoute
- * sends an unauthenticated student to /login with this path as `from`, so after
- * login the student returns here and the claim is bound to their own matric.
- * No biometric model, local database, or original device is required.
- */
+/** Claim a lecturer-issued exemption after authentication. */
 export default function ExemptionClaimPage() {
   const { token } = useParams()
   const { authFetch } = useAuth()

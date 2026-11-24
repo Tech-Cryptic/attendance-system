@@ -1,18 +1,4 @@
-"""
-seed.py — One-shot database setup script for FaceAttend
-=====================================================
-Run this ONCE after applying schema.sql to create:
-  • Admin account
-  • Lecturer account
-  • Student account (login only — biometric enrolled via the web app)
-  • Sample course (CSC401)
-  • Token pre-assigned to the student for enrollment
-
-Usage (from /backend directory, with venv activated):
-  python seed.py
-
-Credentials printed at the end.
-"""
+"""Idempotent database setup for the demo environment."""
 
 import os, sys, secrets, hashlib, hmac
 from datetime import datetime, timedelta, timezone
@@ -31,15 +17,7 @@ DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url e
 
 
 def apply_migrations(cur):
-    """
-    Apply every SQL file in backend/migrations in filename order.
-
-    Teaching note:
-    start.sh runs this script on every Render deploy. A traditional migration
-    tool would track applied versions in a table. Here we keep the same safety
-    by writing idempotent SQL (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT
-    EXISTS). Running a migration twice therefore has no additional effect.
-    """
+    """Apply idempotent SQL files in filename order."""
     migration_dir = os.path.join(os.path.dirname(__file__), "migrations")
     if not os.path.isdir(migration_dir):
         return
@@ -50,7 +28,7 @@ def apply_migrations(cur):
         path = os.path.join(migration_dir, filename)
         with open(path, "r", encoding="utf-8") as f:
             cur.execute(f.read())
-        print(f"   ✅ Applied migration {filename}")
+        print(f"   Applied migration {filename}")
 
 
 # ── Accounts to seed ──────────────────────────────────────────
@@ -95,17 +73,15 @@ def main():
     if sys.stdout.encoding != 'utf-8':
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-    print("\n[*] FaceAttend -- Database Seed Script")
-    print("=" * 45)
+    print("[seed] FaceAttend database setup")
 
     try:
         conn = psycopg2.connect(DATABASE_URL)
         conn.autocommit = False
-        cur  = conn.cursor()
-        print(f"✅ Connected to database: {DATABASE_URL.split('@')[-1]}")
+        cur = conn.cursor()
+        print(f"[seed] connected to {DATABASE_URL.split('@')[-1]}")
     except Exception as e:
-        print(f"❌ Cannot connect to database: {e}")
-        print("\n📋 Make sure PostgreSQL is running and DATABASE_URL is correct.")
+        print(f"[seed] connection failed: {e}")
         sys.exit(1)
 
     # Apply schema if tables don't exist
@@ -119,36 +95,26 @@ def main():
         """)
         exists = cur.fetchone()[0]
         if not exists:
-            print("\n📝 Applying schema.sql…")
             schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
             with open(schema_path, "r", encoding="utf-8") as f:
-                schema_sql = f.read()
-            cur.execute(schema_sql)
+                cur.execute(f.read())
             conn.commit()
-            print("   ✅ Schema applied successfully.")
-        else:
-            print("\n📝 Schema check: tables already exist. Skipping schema apply.")
+            print("[seed] applied schema.sql")
 
-        # Migrations run on both fresh and existing databases. On a fresh DB
-        # schema.sql already contains these changes, but IF NOT EXISTS makes
-        # re-running them harmless.
-        print("\n📝 Applying presence migrations…")
         apply_migrations(cur)
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print(f"❌ Error checking/applying schema: {e}")
+        print(f"[seed] schema setup failed: {e}")
         sys.exit(1)
 
-    # ── 1. Create user accounts ──────────────────────────────────
-    print("\n👤 Creating user accounts…")
+    print("[seed] accounts")
     user_ids = {}
     for acc in ACCOUNTS:
         cur.execute("SELECT id FROM users WHERE email = %s", (acc["email"],))
         existing = cur.fetchone()
         if existing:
-            print(f"   ⚠  {acc['email']} already exists — skipping")
-            user_ids[acc["role"]] = existing[0]
+            user_ids[acc['role']] = existing[0]
             continue
 
         ph = hash_password(acc["password"])
@@ -157,24 +123,14 @@ def main():
             "VALUES (%s, %s, %s, %s, %s) RETURNING id",
             (acc["email"], ph, acc["role"], acc["full_name"], acc.get("linked_matric"))
         )
-        uid = cur.fetchone()[0]
-        user_ids[acc["role"]] = uid
-        print(f"   ✅ {acc['role'].upper():10} {acc['email']}")
+        user_ids[acc["role"]] = cur.fetchone()[0]
 
-    # ── 2. Create course ─────────────────────────────────────────
-    print("\n📚 Creating course…")
     cur.execute("SELECT course_code FROM courses WHERE course_code = %s", (COURSE["course_code"],))
-    if cur.fetchone():
-        print(f"   ⚠  {COURSE['course_code']} already exists — skipping")
-    else:
+    if not cur.fetchone():
         cur.execute(
             "INSERT INTO courses (course_code, course_title, lecturer_id) VALUES (%s, %s, %s)",
             (COURSE["course_code"], COURSE["course_title"], user_ids.get("lecturer"))
         )
-        print(f"   ✅ {COURSE['course_code']} — {COURSE['course_title']}")
-
-    # ── 3. Issue enrollment token for the student ────────────────
-    print("\n🔑 Issuing enrollment token for student…")
     token = secrets.token_urlsafe(24)
     expires = datetime.now(timezone.utc) + timedelta(hours=72)
 
@@ -186,42 +142,23 @@ def main():
     existing_token = cur.fetchone()
     if existing_token:
         token = existing_token[0]
-        print(f"   ⚠  Reusing existing token for 22/01DL068")
     else:
         cur.execute(
             "INSERT INTO enrollment_tokens (token, course_code, matric_number, expires_at) "
             "VALUES (%s, %s, %s, %s)",
             (token, COURSE["course_code"], "22/01DL068", expires)
         )
-        print(f"   ✅ Token issued (expires in 72h)")
 
     conn.commit()
     cur.close()
     conn.close()
 
-    # ── Summary ──────────────────────────────────────────────────
-    # Support both local dev and production (Railway) environments
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
-
-    print("\n" + "=" * 55)
-    print("🎉 Seed complete! Use these credentials:\n")
-    print("  ADMIN LOGIN")
-    print(f"    Email:    admin@unilorin.edu.ng")
-    print(f"    Password: Admin1234!")
-    print(f"    URL:      {frontend_url}/login\n")
-    print("  LECTURER LOGIN")
-    print(f"    Email:    lecturer@unilorin.edu.ng")
-    print(f"    Password: Lecturer1234!")
-    print(f"    URL:      {frontend_url}/login\n")
-    print("  STUDENT LOGIN  (after biometric enrollment)")
-    print(f"    Email:    student@unilorin.edu.ng")
-    print(f"    Password: Student1234!")
-    print(f"    URL:      {frontend_url}/login\n")
-    print("  ENROLLMENT LINK (share this with the student)")
-    print(f"    {frontend_url}/enroll?token={token}")
-    print(f"    Matric: 22/01DL068")
-    print(f"    Token:  {token}")
-    print("\n" + "=" * 55 + "\n")
+    if os.getenv("SHOW_SEED_SUMMARY", "1") != "0":
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+        print(f"[seed] ready at {frontend_url}/login")
+        for account in ACCOUNTS:
+            print(f"[seed] {account['role']}: {account['email']} / {account['password']}")
+        print(f"[seed] enrollment: {frontend_url}/enroll?token={token}")
 
 
 if __name__ == "__main__":

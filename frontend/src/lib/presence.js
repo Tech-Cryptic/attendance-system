@@ -1,18 +1,4 @@
-/**
- * Presence event helpers — offline-first evidence capture.
- *
- * Teaching note:
- * React components should not know about Dexie table names or sync details.
- * They call `queueQrPresenceEvent(...)` and continue. The event is written to
- * IndexedDB immediately, so losing the network mid-lecture cannot lose proof.
- *
- * Signal strategy:
- *   - QR checkpoints are primary and work on every device with a camera.
- *   - GPS is captured opportunistically when the student grants permission.
- *   - BLE/Wi-Fi cannot be scanned by standard cross-browser web APIs, so a
- *     native wrapper can publish signals through `window.FaceAttendVenueBridge`.
- *     The server accepts those signals as corroboration, never as sole proof.
- */
+/** Offline capture helpers for presence evidence. */
 
 import db from './db/schema'
 import { drainPresenceQueue } from './sync/syncQueue'

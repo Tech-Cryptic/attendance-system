@@ -1,10 +1,7 @@
 -- ============================================================
 -- Migration 002 — LLM-assisted presence review
 -- ============================================================
--- Teaching note:
--- The LLM never changes an outcome by itself. It writes a suggestion, a draft
--- message, and extracted entities. A lecturer/admin then approves, overrides,
--- or rejects the suggestion. Every generation and decision is audit-logged.
+-- LLM output is advisory; lecturers approve, override, or reject it.
 
 CREATE TABLE IF NOT EXISTS llm_presence_reviews (
     id                BIGSERIAL PRIMARY KEY,

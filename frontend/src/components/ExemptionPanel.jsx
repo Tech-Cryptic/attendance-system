@@ -2,15 +2,7 @@ import { useState } from 'react'
 import { API_BASE } from '../lib/api'
 import { toast } from './Toast'
 
-/**
- * ExemptionPanel — lecturer-side manual override.
- *
- * Teaching note:
- * A dead phone is a legitimate failure mode. The lecturer, who was physically
- * present, attests that the student was there. The backend binds the generated
- * link to one student + one session, stores only a hash, and expires it. The UI
- * therefore never shows a reusable "class code"; it shows a one-time claim URL.
- */
+/** Lecturer-side manual exemption panel. */
 export default function ExemptionPanel({ session }) {
   const [matric, setMatric] = useState('')
   const [reason, setReason] = useState('')

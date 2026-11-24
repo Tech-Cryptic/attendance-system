@@ -1,16 +1,7 @@
 -- ============================================================
 -- Migration 001 — Presence Evidence & Manual Exemptions
 -- ============================================================
--- Teaching note:
--- This migration is intentionally IDEMPOTENT. Render starts the app by
--- running seed.py on every deploy, so a migration must be safe to run
--- repeatedly. `IF NOT EXISTS` lets us add new capability without a
--- separate migration framework.
---
--- Design decision:
--- We do not overwrite attendance with NULL when a student leaves. We keep
--- an append-only event log and calculate a separate outcome. That way the
--- original evidence is never destroyed and can be audited later.
+-- Safe to re-run on every deploy; evidence is append-only and outcomes are separate.
 
 -- 1. Session-level policy configuration -------------------------------
 -- The session owns the rules. A lecturer can choose how strict a class is

@@ -85,7 +85,7 @@ class TestRegister:
                 "password": "TestPass123!",
                 "full_name": "No Matric",
                 "role": "student",
-                # linked_matric intentionally omitted
+                # linked_matric omitted
             }
         )
         assert resp.status_code == 400

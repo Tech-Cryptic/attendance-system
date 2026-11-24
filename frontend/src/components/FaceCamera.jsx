@@ -1,36 +1,12 @@
 import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react'
 import { initHuman, detectAndEmbed, isHumanReady } from '../lib/faceai/detector'
-import { LivenessMonitor, rPPGSampler, computeEAR } from '../lib/faceai/liveness'
+import { LivenessMonitor, rPPGSampler } from '../lib/faceai/liveness'
 
-/**
- * FaceCamera — Real-time face detection camera component.
- *
- * Features:
- *  - Live webcam feed with mirrored display
- *  - FaceMesh 478-point overlay drawn on canvas
- *  - Coloured bounding box indicating liveness state
- *  - EAR blink detection via LivenessMonitor
- *  - rPPG passive liveness sampling
- *  - Emits detection results to parent via onDetect callback
- *
- * Ref API (useImperativeHandle):
- *  - captureEmbedding()   : capture a single high-quality embedding frame
- *  - getLivenessStatus()  : current LivenessMonitor status
- *  - getRPPGStatus()      : current rPPG analysis result
- *
- * Props:
- *  - onDetect(result)      : called every frame with DetectionResult
- *  - onLivenessChange(st)  : called when liveness state changes
- *  - onModelLoad(progress) : called during model load with { loaded, total }
- *  - mode                  : 'enroll' | 'verify' | 'preview'
- *  - requiredBlinks        : number of blinks for liveness challenge (default 2)
- *  - width / height        : camera resolution (default 640×480)
- */
+/** Camera component for face detection, embeddings, and liveness checks. */
 const FaceCamera = forwardRef(function FaceCamera({
   onDetect,
   onLivenessChange,
   onModelLoad,
-  mode = 'preview',
   requiredBlinks = 2,
   width = 640,
   height = 480,
@@ -50,7 +26,15 @@ const FaceCamera = forwardRef(function FaceCamera({
   const [lastResult, setLastResult] = useState(null)
   const [livenessStatus, setLivenessStatus] = useState(null)
 
-  // ── Expose API to parent via ref ──────────────────────────────
+  const stopCamera = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    setCameraState('off')
+  }, [])
+
   useImperativeHandle(ref, () => ({
     captureEmbedding: () => lastResult?.embedding ?? null,
     getLivenessStatus: () => livenessMonitorRef.current?.status() ?? null,
@@ -59,8 +43,8 @@ const FaceCamera = forwardRef(function FaceCamera({
       livenessMonitorRef.current?.reset()
       rppgSamplerRef.current?.reset()
     },
-    stopCamera: stopCamera,
-  }), [lastResult])
+    stopCamera,
+  }), [lastResult, stopCamera])
 
   // ── Model initialisation ──────────────────────────────────────
   useEffect(() => {
@@ -114,20 +98,10 @@ const FaceCamera = forwardRef(function FaceCamera({
     }
   }, [width, height])
 
-  const stopCamera = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-    setCameraState('off')
-  }, [])
-
-  // Start camera once model is ready
   useEffect(() => {
     if (modelState === 'ready') startCamera()
     return () => stopCamera()
-  }, [modelState])
+  }, [modelState, startCamera, stopCamera])
 
   // ── Inference loop ────────────────────────────────────────────
   useEffect(() => {
@@ -154,16 +128,14 @@ const FaceCamera = forwardRef(function FaceCamera({
       let result = null
       try {
         result = await detectAndEmbed(video)
-      } catch (err) {
-        // Silently ignore per-frame errors (can happen during model loading)
-      }
+      } catch { /* expected during model loading */ }
 
       // Clear overlay
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       if (result) {
         // ── Draw mesh overlay ────────────────────────────────
-        drawFaceMeshOverlay(ctx, result, canvas.width, canvas.height)
+        drawFaceMeshOverlay(ctx, result, canvas.width)
 
         // ── EAR Blink ────────────────────────────────────────
         const livenessStatus = livenessMonitorRef.current?.update(result.annotations)
@@ -201,28 +173,20 @@ const FaceCamera = forwardRef(function FaceCamera({
     }
   }, [cameraState, modelState, onDetect, onLivenessChange])
 
-  // ── Liveness state → box color ────────────────────────────────
-  const boxClass = (() => {
-    if (!livenessStatus) return ''
-    if (livenessStatus.passed) return 'liveness-pass'
-    if (livenessStatus.failed) return 'liveness-fail'
-    return 'liveness-checking'
-  })()
-
   // ── Status bar content ────────────────────────────────────────
   const statusText = (() => {
     if (modelState === 'loading') {
       return `Loading AI models… ${Math.round(loadProgress * 100)}%`
     }
-    if (modelState === 'error')  return '⚠️ Model failed to load'
-    if (cameraState === 'error') return '⚠️ Camera access denied'
+    if (modelState === 'error')  return 'Model failed to load'
+    if (cameraState === 'error') return 'Camera access denied'
     if (cameraState === 'starting') return 'Starting camera…'
     if (!lastResult)             return 'Position your face in frame'
-    if (livenessStatus?.passed)  return '✅ Liveness confirmed'
-    if (livenessStatus?.failed)  return '❌ Liveness timeout — please retry'
+    if (livenessStatus?.passed)  return 'Liveness confirmed'
+    if (livenessStatus?.failed)  return 'Liveness timeout — please retry'
     const blinks = livenessStatus?.blinkCount ?? 0
     const req    = livenessStatus?.required   ?? requiredBlinks
-    return `👁  Please blink naturally (${blinks}/${req} detected)`
+    return `Please blink naturally (${blinks}/${req} detected)`
   })()
 
   const confidenceText = lastResult?.faceScore
@@ -297,7 +261,6 @@ const FaceCamera = forwardRef(function FaceCamera({
           backdropFilter: 'blur(6px)', border: '1px solid rgba(255,255,255,0.1)',
           display: 'flex', alignItems: 'center', gap: '6px',
         }}>
-          <span>👁</span>
           <span>{livenessStatus.blinkCount}/{livenessStatus.required} blinks</span>
         </div>
       )}
@@ -311,7 +274,7 @@ const FaceCamera = forwardRef(function FaceCamera({
  * Draw the 478-point face mesh and coloured bounding box on canvas.
  * Uses raw landmark coordinates from human.js result.
  */
-function drawFaceMeshOverlay(ctx, result, canvasW, canvasH) {
+function drawFaceMeshOverlay(ctx, result, canvasW) {
   if (!result?.mesh || !result?.box) return
 
   const [bx, by, bw, bh] = result.box

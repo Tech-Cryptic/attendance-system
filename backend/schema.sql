@@ -1,6 +1,6 @@
 -- ============================================================
 -- Offline-First AI Attendance System — PostgreSQL Schema
--- University of Ilorin | Candidate: 22/01DL068
+-- University of Ilorin
 -- ============================================================
 
 -- ── Users (Admin / Lecturer / Student accounts) ─────────────

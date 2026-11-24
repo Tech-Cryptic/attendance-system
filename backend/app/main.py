@@ -17,7 +17,7 @@ load_dotenv()
 
 app = FastAPI(
     title="FaceAttend API — Unilorin Biometric Attendance",
-    description="Offline-first AI facial recognition attendance system. NDPA 2023 compliant. Multi-face proximity-batch scanning.",
+    description="Biometric attendance API with offline presence evidence and human-reviewed exceptions.",
     version="2.0.0"
 )
 

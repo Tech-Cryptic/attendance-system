@@ -27,7 +27,7 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
         ])
         if (sesRes.ok) setSessions(await sesRes.json())
         if (crsRes.ok) setCourses(await crsRes.json())
-      } catch {}
+      } catch { setSessions([]); setCourses([]) }
       finally { setLoading(false) }
     }
     if (token) load()
@@ -261,7 +261,7 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
               </div>
 
               <p className="text-muted" style={{ fontSize: 'var(--text-xs)' }}>
-                NDPR 2019 compliant — no raw biometric data is exported. Records contain attendance metadata only.
+                Exports contain attendance metadata only; raw biometric data is not included.
               </p>
             </div>
           )}

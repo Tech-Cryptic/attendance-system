@@ -9,9 +9,7 @@ export default function LivenessGate({ status, rppgScore }) {
   if (!status) {
     return (
       <div style={overlayStyle}>
-        <div className="liveness-ring">
-          <span style={{ fontSize: '28px' }}>👁</span>
-        </div>
+        <div className="liveness-ring" />
         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center' }}>
           Position your face in the camera frame
         </p>
@@ -26,12 +24,12 @@ export default function LivenessGate({ status, rppgScore }) {
     return (
       <div style={overlayStyle}>
         <div className="liveness-ring pass" style={{ borderColor: 'var(--success)', boxShadow: '0 0 0 4px rgba(16,185,129,0.2), 0 0 30px rgba(16,185,129,0.4)' }}>
-          <span style={{ fontSize: '32px' }}>✅</span>
+          <span style={{ fontSize: '32px' }}>✓</span>
         </div>
         <p style={{ color: 'var(--success)', fontWeight: 700, fontSize: '16px' }}>Liveness confirmed!</p>
         {rppgScore !== null && (
           <div className="badge badge-success" style={{ marginTop: '4px' }}>
-            💓 Pulse detected ({rppgScore != null ? `${Math.round(rppgScore * 100)}%` : '—'})
+            Pulse detected ({rppgScore != null ? `${Math.round(rppgScore * 100)}%` : '—'})
           </div>
         )}
       </div>
@@ -42,7 +40,7 @@ export default function LivenessGate({ status, rppgScore }) {
     return (
       <div style={overlayStyle}>
         <div className="liveness-ring" style={{ borderColor: 'var(--danger)', boxShadow: '0 0 0 4px rgba(239,68,68,0.2)' }}>
-          <span style={{ fontSize: '32px' }}>⏰</span>
+          <span style={{ fontSize: '32px' }}>!</span>
         </div>
         <p style={{ color: 'var(--danger)', fontWeight: 700 }}>Timed out</p>
         <p className="text-secondary text-sm" style={{ textAlign: 'center' }}>
@@ -82,7 +80,7 @@ export default function LivenessGate({ status, rppgScore }) {
           position: 'absolute', inset: 0, display: 'flex',
           flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
         }}>
-          <span style={{ fontSize: '24px', lineHeight: 1 }}>👁</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>BLINK</span>
           <span style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
             {blinkCount}/{required}
           </span>

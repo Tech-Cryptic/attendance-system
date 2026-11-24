@@ -29,7 +29,7 @@ export function onSyncEvent(fn) {
 
 function emit(event) {
   for (const fn of listeners) {
-    try { fn(event) } catch {}
+    try { fn(event) } catch { listeners.delete(fn) }
   }
 
   // ── Toast notifications on key events ──────────────────────
@@ -191,15 +191,7 @@ export async function drainQueue() {
 
 // ── Presence evidence queue ─────────────────────────────────────────
 
-/**
- * Drain `presenceQueue` through POST /presence/events.
- *
- * Teaching note:
- * This endpoint requires a JWT unlike the legacy /attendance/mark route.
- * If the token is absent or expired we leave records pending instead of
- * marking them failed: the student can log in again on ANY device and a
- * later drain will still succeed.
- */
+/** Drain `presenceQueue` through POST /presence/events. */
 export async function drainPresenceQueue() {
   if (presenceDraining || !navigator.onLine) return
   presenceDraining = true

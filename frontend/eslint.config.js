@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'dev-dist']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -16,6 +16,17 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      'react-hooks/immutability': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
+  {
+    files: ['src/components/Toast.jsx', 'src/context/AuthContext.jsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 ])

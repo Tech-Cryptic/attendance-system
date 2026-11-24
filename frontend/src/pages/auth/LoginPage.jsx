@@ -174,7 +174,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted" style={{ marginTop: '32px', lineHeight: '1.8' }}>
-          NDPR 2019 compliant · All biometric processing is on-device<br/>
+          Facial processing runs on-device<br/>
           University of Ilorin — Computer Science Dept.
         </p>
       </div>

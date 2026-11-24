@@ -1,11 +1,4 @@
-"""
-Unit tests for the presence policy engine.
-
-Teaching note:
-These tests do not touch PostgreSQL or FastAPI. That is intentional: the
-business rule is the highest-value thing to test, and it should be testable in
-milliseconds without seeded accounts or a live database.
-"""
+"""Unit tests for the presence policy engine."""
 
 from datetime import datetime, timedelta, timezone
 

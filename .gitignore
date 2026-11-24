@@ -7,6 +7,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+~$*
+*.tmp
 
 # ── Python backend ────────────────────────────────────────
 backend/venv/
@@ -15,6 +17,8 @@ backend/**/__pycache__/
 backend/**/*.pyc
 backend/.env
 backend/*.egg-info/
+/backend/fix_name.py
+/backend/test_admin.py
 
 # ── Node / Frontend ───────────────────────────────────────
 frontend/node_modules/
@@ -23,6 +27,11 @@ frontend/dev-dist/
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+
+# Root workspace artifacts
+/node_modules/
+/package.json
+/package-lock.json
 
 # ── Secrets (never commit these) ─────────────────────────
 *.pem

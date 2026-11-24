@@ -38,6 +38,8 @@ services:
         value: gpt-4o-mini
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
+      - key: SHOW_SEED_SUMMARY
+        value: "0"
 
 
 databases:

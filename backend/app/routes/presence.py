@@ -1,13 +1,4 @@
-"""
-Presence evidence API.
-
-Teaching note:
-This router is intentionally separate from `attendance.py`. The old route
-answers "did this face match?". This router answers a different question:
-"did the student remain present for the whole session?". Keeping the two
-concerns separate lets us change presence policy without rewriting biometric
-matching, and lets both online and offline clients submit the same evidence.
-"""
+"""Presence evidence, exemption, and review endpoints."""
 
 import hashlib
 import os
@@ -318,13 +309,7 @@ def _event_dict(row) -> dict:
 
 
 def finalize_session(cur, session_id) -> dict:
-    """
-    Compute and store one outcome per enrolled student.
-
-    Teaching note:
-    `attendance_records` remains untouched. We write a separate
-    `attendance_outcomes` row so policy changes never erase biometric evidence.
-    """
+    """Compute and store one outcome per enrolled student."""
     session = _session_row(cur, session_id)
     if not session:
         raise HTTPException(status_code=404, detail='Session not found.')
@@ -474,14 +459,7 @@ def create_exemption(
     request: Request,
     actor: dict = Depends(require_roles('lecturer', 'admin')),
 ):
-    """
-    Lecturer issues a single-use claim link after class.
-
-    Security decisions:
-      - The raw token is returned once and never stored.
-      - It is bound to one student and one session.
-      - Previous unused links are revoked, so only the newest link is live.
-    """
+    """Issue a single-use exemption link bound to one student and session."""
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -572,13 +550,7 @@ def claim_exemption(
     request: Request,
     actor: dict = Depends(require_roles('student')),
 ):
-    """
-    Student claims an exemption from any device after logging in.
-
-    Teaching note:
-    The link is only a capability. Identity still comes from the JWT, so
-    finding someone else's link does not let a student claim their exemption.
-    """
+    """Claim an exemption using the link token and the authenticated student."""
     matric = actor.get('matric_number')
     if not matric:
         raise HTTPException(status_code=400, detail='No matric_number in token payload.')
@@ -857,12 +829,7 @@ def decide_review(
     req: ReviewDecisionRequest,
     actor: dict = Depends(require_roles('lecturer', 'admin')),
 ):
-    """
-    Apply a human decision to an LLM suggestion.
-
-    `approve` and `override` update the authoritative outcome. `reject` leaves
-    the outcome as pending_review and only records the audit decision.
-    """
+    """Apply a lecturer/admin decision to an LLM suggestion."""
     conn = get_connection()
     try:
         cur = conn.cursor()

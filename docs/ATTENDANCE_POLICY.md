@@ -1,133 +1,79 @@
-# Attendance Policy: Offline-First Presence Evidence
+# Attendance Presence Policy
 
-## 1. The problem this solves
+## 1. Scope
 
-The original system answered one question:
+FaceAttend records biometric evidence and presence evidence separately. A face match proves that a person enrolled; it does not prove that the student stayed for the lecture.
 
-> Did this face match an enrolled student?
+The presence layer records signed QR checkpoints, venue signals, explicit leave events, and manual exemptions. The server converts that evidence into an attendance outcome.
 
-That is not the same as:
+## 2. Data ownership
 
-> Did the student remain in the lecture?
+The device records evidence in IndexedDB while offline. The server owns session times, enrolments, revocations, and the final outcome.
 
-A student could scan the session QR at 8:00am, leave immediately, and still have a biometric attendance record. This document describes the presence layer that fixes that without breaking the offline-first guarantee.
+| Store | Purpose |
+|---|---|
+| IndexedDB `presenceQueue` | Provisional evidence captured on the device |
+| `attendance_records` | Biometric evidence: face distance, liveness, match method |
+| `attendance_outcomes` | Server-owned result for each student and session |
 
-## 2. The central design rule
+An outcome is one of `present`, `left_early`, `absent`, `exempted`, or `pending_review`.
 
-```text
-evidence != outcome
-```
+## 3. Presence signals
 
-The device records **evidence**. The server computes the **outcome**.
+| Signal | Role | Limitation |
+|---|---|---|
+| Signed session QR | Required check-in | Can be screenshotted |
+| Signed checkpoint/check-out QR | Primary continuity proof | Lecturer must generate it |
+| GPS | Corroborates continuity | Poor indoors, spoofable, needs permission |
+| Wi-Fi / BLE beacon | Corroborates continuity | Needs configuration and native bridge |
+| Manual exemption | Lecturer attestation | Trusts the lecturer and is audited |
 
-Offline-first means the phone can capture evidence with no network. It does **not** mean the phone has authority over the final result. Only the server knows:
+Continuity is satisfied by either enough accepted QR checkpoints or configured venue signals spanning the lecture. A single weak signal is never enough for `present`.
 
-- the real session start/end time,
-- who is enrolled,
-- whether a token was revoked,
-- whether an event arrived after the grace window.
+## 4. Outcome rules
 
-Local state in IndexedDB is therefore always **provisional**. `attendance_outcomes` in PostgreSQL is authoritative.
+1. An active exemption produces `exempted`.
+2. A signed QR check-in is required.
+3. Accepted QR checkpoints or configured venue signals establish continuity.
+4. A check-out QR, late batch scan, or the same venue continuity establishes end-of-session proof.
+5. An explicit leave event or final out-of-venue signal produces `left_early`.
+6. Ambiguous or late evidence produces `pending_review` for human inspection.
 
-## 3. Why all four signals can coexist
+Late evidence is stored with its original observed time. The server compares it with `grace_minutes` before deciding whether it needs review.
 
-You asked for QR checkpoints, check-in/check-out, BLE/Wi-Fi, and GPS. They are all useful, but they must not be four separate truths.
-
-| Signal | Strength | Failure mode | Role in policy |
-|---|---|---|---|
-| Signed QR check-in | Strong identity proof | Can be shared/screenshotted | Required to start |
-| Signed midpoint / check-out QR | Strong time proof | Lecturer must generate it | Primary continuity proof |
-| GPS venue check | Medium | Poor indoors, spoofable, battery/permission | Corroborates continuity |
-| Wi-Fi / BLE beacon | Medium | Needs config/hardware, browser limits | Corroborates continuity |
-| Manual exemption | Human attestation | Trusts lecturer | Explicit audited override |
-
-The policy uses **OR**, not AND, for continuity:
-
-```text
-enough QR checkpoints  OR  venue signals spanning the lecture
-```
-
-That is deliberate. If one sensor fails, another valid signal can still prove presence. Conversely, a single weak signal can never silently produce `present` by itself.
-
-## 4. State machine
-
-```text
-(no evidence)
-     │
-     ├── signed QR check-in ──────► checked_in (provisional)
-     │                                  │
-     │                                  ├── required checkpoints + end proof ─► present
-     │                                  ├── venue signals span lecture ───────► present
-     │                                  ├── explicit leave / final out-of-venue ► left_early
-     │                                  ├── late/conflicting evidence ─────────► pending_review
-     │                                  └── incomplete evidence ───────────────► pending_review
-     │
-     └── lecturer exemption claimed ───► exempted (counts as present, audited)
-```
-
-`left_early` is not stored as SQL `NULL`. We keep the original evidence and store an explicit status. Reports can map `left_early` to “no credit”, but the audit trail remains intact.
-
-## 5. Grace then review
-
-A phone clock can be wrong and an offline sync can arrive minutes late. Hard-rejecting every late event would punish poor networks.
-
-The server therefore:
-
-1. accepts the event and stores it,
-2. compares `observed_at` with server time and `grace_minutes`,
-3. marks it as needing review when it is outside the grace window,
-4. never lets that ambiguity become an automatic failure.
-
-The outcome is `pending_review`, and the lecturer/admin can re-run finalisation after inspecting evidence.
-
-## 6. Request flow
+## 5. Request flow
 
 ### Online
 
-1. Lecturer creates a session. The signed session QR is the check-in QR.
-2. Lecturer generates a midpoint checkpoint QR or an end-of-class check-out QR.
-3. Student scans. `queueQrPresenceEvent()` writes the event to Dexie immediately.
-4. The sync manager POSTs it to `/presence/events`.
-5. Lecturer ends the session. `/sessions/{id}/end` calls `finalize_session()` automatically.
-6. One `attendance_outcomes` row is written per enrolled student.
+1. Lecturer creates a session and the signed session QR.
+2. Lecturer generates checkpoint or check-out QR codes during the lecture.
+3. Student scans; `queueQrPresenceEvent()` writes the event to IndexedDB.
+4. The sync manager posts queued events to `/presence/events`.
+5. Ending the session calls `finalize_session()` and writes one outcome per enrolled student.
 
 ### Offline
 
-1. QR scan is still recorded locally with `crypto.randomUUID()` as `event_id`.
-2. GPS/native venue signals are attached when available.
-3. No request is made. The student sees a pending count.
-4. On the next `online` event, the queue drains.
-5. If the session was already ended, the lecturer re-runs `/presence/sessions/{id}/finalize`.
+1. QR scans and venue signals are stored locally with a client-generated `event_id`.
+2. No request is sent while offline; the student sees a pending count.
+3. On reconnect, the queue drains.
+4. If the session already ended, the lecturer re-runs `/presence/sessions/{id}/finalize`.
 
-The `event_id` makes retries idempotent. A timeout followed by a retry cannot create two attendance events.
+`event_id` makes retries idempotent. A timeout followed by a retry cannot create two rows for the same event.
 
-## 7. Why `attendance_records` was not replaced
-
-`attendance_records` remains the biometric evidence table:
-
-- face distance,
-- liveness scores,
-- method (`batch_face`, `fallback_qr`, `manual_override`),
-- device sync flag.
-
-`attendance_outcomes` is the policy decision table. Separating them means a policy change never destroys biometric evidence and a policy bug can be corrected by re-finalising.
-
-## 8. Manual exemption flow
-
-When a phone dies:
+## 6. Manual exemptions
 
 1. After class, the lecturer opens the ended session.
-2. `ExemptionPanel` submits matric + reason.
-3. Backend generates a 32-byte random token, stores only its SHA-256 hash, and returns a one-time URL.
-4. Previous unused links for that student/session are revoked.
-5. Student opens the URL on **any device**. ProtectedRoute sends them to login if needed, then returns to the same URL.
-6. `POST /presence/exemptions/{token}/claim` verifies the JWT matric matches the link, inserts a `manual_override` attendance record, and writes an `exempted` outcome.
+2. `ExemptionPanel` submits the student's matric number and a reason.
+3. The backend generates a 32-byte token, stores only its SHA-256 hash, and returns a one-time URL.
+4. Previous unused links for that student and session are revoked.
+5. The student opens the URL on any device; the JWT supplies identity.
+6. `POST /presence/exemptions/{token}/claim` writes an `exempted` outcome and an audit entry.
 
-The link is a capability; the JWT is the identity. Finding someone else's link does not let a student claim it.
+The link is a capability; the JWT is the identity. Possessing someone else's link does not allow a student to claim it.
 
-## 9. Adding real BLE / Wi-Fi adapters
+## 7. BLE and Wi-Fi adapters
 
-Standard browsers cannot scan BLE or nearby Wi-Fi consistently across iOS and Android. The frontend therefore exposes a native bridge hook:
+Browsers cannot scan BLE or nearby Wi-Fi consistently across iOS and Android. The web app accepts signals from a native bridge:
 
 ```js
 window.FaceAttendVenueBridge = {
@@ -137,7 +83,7 @@ window.FaceAttendVenueBridge = {
 }
 ```
 
-A native wrapper (Capacitor/Cordova) can implement that hook. The web app keeps working without it, using QR + optional GPS.
+A Capacitor or Cordova wrapper can implement that hook. Without it, the app uses QR and optional GPS.
 
 Configure expected signals when creating a session:
 
@@ -153,57 +99,49 @@ Configure expected signals when creating a session:
 }
 ```
 
-The server compares reported signals only against this configured list. Unknown signals are never treated as proof.
+Only configured signals are compared. Unknown signals are ignored.
 
-## 10. LLM-assisted review workflow
+## 8. LLM-assisted review
 
-When the rule engine returns `pending_review`, a lecturer can request an LLM review from the ended session page.
+When the rule engine returns `pending_review`, a lecturer can request an advisory review.
 
 ```text
 pending_review outcome
-   → server builds a compact evidence payload
-   → OpenAI-compatible LLM returns strict JSON
-   → Pydantic validates the suggestion
-   → lecturer approves, overrides, or rejects
-   → attendance_outcomes changes only after the human decision
+  → server builds a compact evidence payload
+  → OpenAI-compatible LLM returns strict JSON
+  → Pydantic validates the suggestion
+  → lecturer approves, overrides, or rejects
+  → attendance_outcomes changes only after the human decision
 ```
 
-The validated JSON contains:
+The validated response contains `recommended_status`, `confidence`, `reason_summary`, extracted `entities`, and a `draft_message`.
 
-- `recommended_status`
-- `confidence`
-- `reason_summary`
-- `entities` with extracted course, session, signals, issues, and `route_to`
-- `draft_message` for the student
-
-Safety rules:
-
-- The LLM has no database access and never writes `attendance_outcomes`.
-- Invalid JSON or an API failure falls back to conservative deterministic rules.
-- `llm_presence_reviews`, `llm_review_decisions`, and `llm_review_audit` store suggestions, human decisions, and non-sensitive metadata.
+- The model has no database access.
+- Invalid JSON or an API failure falls back to deterministic rules.
+- `llm_presence_reviews`, `llm_review_decisions`, and `llm_review_audit` store suggestions, decisions, and non-sensitive metadata.
 - The raw prompt is not logged because it contains student evidence.
 
-Configure the workflow with `OPENAI_API_KEY`, optional `OPENAI_MODEL`, and optional `OPENAI_BASE_URL` for OpenAI-compatible providers.
+Configure with `OPENAI_API_KEY`, optional `OPENAI_MODEL`, and optional `OPENAI_BASE_URL`.
 
-## 11. Privacy / NDPR notes
+## 9. Privacy notes
 
-- Store coarse evidence (`within_venue: true/false`, timestamp, signal ID), not continuous location tracks.
+- Store coarse evidence such as `within_venue` and timestamps, not continuous location tracks.
 - GPS is captured only during an attendance session and only with browser permission.
 - Exemption links expire after 24 hours by default and are single-use.
-- Only token hashes are stored.
-- The exemption reason is visible to admin/lecturer audits, so it must not contain sensitive medical details.
+- Only exemption token hashes are stored.
+- Exemption reasons are visible in lecturer/admin audits; avoid sensitive medical details.
 
-## 12. API summary
+## 10. API summary
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
-| POST | `/presence/checkpoints` | lecturer/admin | Create signed midpoint/check-out QR |
+| POST | `/presence/checkpoints` | lecturer/admin | Create signed checkpoint QR |
 | POST | `/presence/events` | student | Submit offline-safe evidence batch |
 | POST | `/presence/sessions/{id}/finalize` | lecturer/admin | Recalculate outcomes |
 | GET | `/presence/sessions/{id}/outcomes` | lecturer/admin | Review outcomes |
 | POST | `/presence/exemptions` | lecturer/admin | Issue one-time claim link |
 | GET | `/presence/exemptions/{token}/preview` | public | Show course/status before claiming |
 | POST | `/presence/exemptions/{token}/claim` | student | Claim from any device |
-| POST | `/presence/reviews/generate` | lecturer/admin | Generate validated LLM suggestion |
+| POST | `/presence/reviews/generate` | lecturer/admin | Generate validated review suggestion |
 | GET | `/presence/reviews?session_id=` | lecturer/admin | List suggestions and decisions |
 | POST | `/presence/reviews/{id}/decision` | lecturer/admin | Approve, override, or reject suggestion |
