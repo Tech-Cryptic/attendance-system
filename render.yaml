@@ -32,6 +32,12 @@ services:
         value: "3.11.0"
       - key: FRONTEND_URL
         value: https://faceattend-bc91.onrender.com
+      # Optional: set OPENAI_API_KEY in the Render dashboard to enable the LLM
+      # review workflow. Without it the app uses deterministic fallback rules.
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
 
 
 databases:
