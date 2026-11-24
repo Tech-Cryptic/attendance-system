@@ -41,6 +41,10 @@ function emit(event) {
     toast.error(`${event.failed} record${event.failed > 1 ? 's' : ''} failed to sync.`)
   if (event.type === 'record_failed' && event.permanent)
     toast.error('A record could not be synced — session may have expired.')
+  if (event.type === 'presence_sync_complete' && event.synced > 0)
+    toast.info(`${event.synced} presence check${event.synced > 1 ? 's' : ''} synced.`)
+  if (event.type === 'presence_sync_paused')
+    toast.warning('Presence checks are waiting for you to sign in.')
 }
 
 
@@ -90,6 +94,7 @@ export async function clearSyncedRecords() {
 // ── Drain the queue ────────────────────────────────────────────
 
 let draining = false
+let presenceDraining = false
 
 export async function drainQueue() {
   if (draining || !navigator.onLine) return
@@ -174,8 +179,117 @@ export async function drainQueue() {
 
     emit({ type: 'sync_complete', synced, failed })
 
+    // Presence evidence uses the same online transition but a different
+    // endpoint. Keeping it in the same drain cycle means one connectivity
+    // event reconciles both biometric records and continuity proof.
+    await drainPresenceQueue()
+
   } finally {
     draining = false
+  }
+}
+
+// ── Presence evidence queue ─────────────────────────────────────────
+
+/**
+ * Drain `presenceQueue` through POST /presence/events.
+ *
+ * Teaching note:
+ * This endpoint requires a JWT unlike the legacy /attendance/mark route.
+ * If the token is absent or expired we leave records pending instead of
+ * marking them failed: the student can log in again on ANY device and a
+ * later drain will still succeed.
+ */
+export async function drainPresenceQueue() {
+  if (presenceDraining || !navigator.onLine) return
+  presenceDraining = true
+
+  try {
+    const pending = await db.presenceQueue
+      .where('status').equals('pending')
+      .sortBy('createdAt')
+
+    if (pending.length === 0) return
+
+    const token = localStorage.getItem('fa_token')
+    if (!token) {
+      emit({ type: 'presence_sync_paused', reason: 'login_required' })
+      return
+    }
+
+    emit({ type: 'presence_sync_start', count: pending.length })
+    let synced = 0, failed = 0
+
+    for (const event of pending) {
+      if (!navigator.onLine) break
+
+      try {
+        const res = await fetch(`${API_BASE}/presence/events`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            client_uuid: event.client_uuid ?? getClientUUID(),
+            events: [{
+              event_id:          event.event_id,
+              session_id:        event.session_id,
+              matric_number:     event.matric_number,
+              event_type:        event.event_type,
+              source:            event.source,
+              checkpoint_id:     event.checkpoint_id ?? undefined,
+              qr_payload:        event.qr_payload ?? undefined,
+              qr_signature:      event.qr_signature ?? undefined,
+              qr_nonce:          event.qr_nonce ?? undefined,
+              observed_at:       event.observedAt,
+              latitude:          event.latitude ?? undefined,
+              longitude:         event.longitude ?? undefined,
+              accuracy_m:        event.accuracy_m ?? undefined,
+              ssid:              event.ssid ?? undefined,
+              bssid:             event.bssid ?? undefined,
+              beacon_id:         event.beacon_id ?? undefined,
+              rssi:              event.rssi ?? undefined,
+              synced_from_client: true,
+            }],
+          }),
+          signal: AbortSignal.timeout(15000),
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          await db.presenceQueue.update(event.id, {
+            status: 'synced',
+            syncedAt: Date.now(),
+            serverResponse: data,
+          })
+          synced++
+        } else if ([400, 401, 403, 404, 409, 410, 422].includes(res.status)) {
+          const data = await res.json().catch(() => ({}))
+          await db.presenceQueue.update(event.id, {
+            status: 'failed',
+            error: `HTTP ${res.status}: ${data.detail ?? 'Rejected'}`,
+          })
+          failed++
+        } else {
+          const retries = (event.retries ?? 0) + 1
+          if (retries >= MAX_RETRY) {
+            await db.presenceQueue.update(event.id, {
+              status: 'failed', retries, error: `Max retries exceeded (HTTP ${res.status})`,
+            })
+            failed++
+          } else {
+            await db.presenceQueue.update(event.id, { retries })
+          }
+        }
+      } catch {
+        // Network error — keep pending for the next online event.
+      }
+    }
+
+    emit({ type: 'presence_sync_complete', synced, failed })
+  } finally {
+    presenceDraining = false
   }
 }
 
@@ -187,7 +301,10 @@ function handleOnline() {
   clearTimeout(syncTimer)
   emit({ type: 'online' })
   // Debounce: wait a moment for network to stabilise
-  syncTimer = setTimeout(() => drainQueue(), SYNC_DEBOUNCE_MS)
+  syncTimer = setTimeout(() => {
+    drainQueue()
+    drainPresenceQueue()
+  }, SYNC_DEBOUNCE_MS)
 }
 
 function handleOffline() {
@@ -205,7 +322,10 @@ export function startSyncManager() {
 
   // Initial drain if already online
   if (navigator.onLine) {
-    setTimeout(() => drainQueue(), 3000)
+    setTimeout(() => {
+      drainQueue()
+      drainPresenceQueue()
+    }, 3000)
   }
 
   return function stop() {

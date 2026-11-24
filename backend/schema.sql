@@ -125,3 +125,102 @@ CREATE INDEX idx_students_flag ON students(high_similarity_flag) WHERE high_simi
 CREATE INDEX idx_courses_flag ON courses(over_enrollment_flagged) WHERE over_enrollment_flagged = TRUE;
 -- Enrollment link token lookup
 CREATE INDEX idx_courses_link ON courses(enrollment_link_token);
+
+-- ============================================================
+-- Presence Evidence & Manual Exemptions (Migration 001)
+-- Mirrored here so a fresh database gets the complete schema.
+-- seed.py also applies migrations/*.sql idempotently on startup.
+-- ============================================================
+
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS presence_policy      VARCHAR(20) NOT NULL DEFAULT 'full_session',
+    ADD COLUMN IF NOT EXISTS required_checkpoints INT NOT NULL DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS grace_minutes        INT NOT NULL DEFAULT 5,
+    ADD COLUMN IF NOT EXISTS venue_lat            DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS venue_lon            DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS venue_radius_m       INT NOT NULL DEFAULT 100,
+    ADD COLUMN IF NOT EXISTS venue_ssids          TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS venue_beacon_ids     TEXT[] NOT NULL DEFAULT '{}',
+    ADD COLUMN IF NOT EXISTS finalized_at         TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS session_checkpoints (
+    id            BIGSERIAL PRIMARY KEY,
+    session_id    UUID NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    checkpoint_id UUID NOT NULL UNIQUE,
+    event_type    VARCHAR(20) NOT NULL CHECK (event_type IN ('checkpoint', 'check_out')),
+    label         VARCHAR(100),
+    nonce         VARCHAR(64) NOT NULL,
+    qr_payload    TEXT NOT NULL,
+    qr_signature  VARCHAR(128) NOT NULL,
+    expires_at    TIMESTAMPTZ NOT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (session_id, nonce)
+);
+
+CREATE TABLE IF NOT EXISTS presence_events (
+    id                 BIGSERIAL PRIMARY KEY,
+    event_id           UUID NOT NULL UNIQUE,
+    session_id         UUID NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    matric_number      VARCHAR(20) NOT NULL REFERENCES students(matric_number),
+    event_type         VARCHAR(20) NOT NULL CHECK (
+                           event_type IN ('check_in', 'checkpoint', 'check_out', 'leave', 'venue_signal')
+                       ),
+    source             VARCHAR(20) NOT NULL CHECK (
+                           source IN ('qr', 'gps', 'wifi', 'ble', 'client', 'manual')
+                       ),
+    checkpoint_id      UUID REFERENCES session_checkpoints(checkpoint_id),
+    qr_nonce           VARCHAR(64),
+    observed_at        TIMESTAMPTZ NOT NULL,
+    received_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    latitude           DOUBLE PRECISION,
+    longitude          DOUBLE PRECISION,
+    accuracy_m         DOUBLE PRECISION,
+    ssid               VARCHAR(100),
+    bssid              VARCHAR(64),
+    beacon_id          VARCHAR(64),
+    rssi               INT,
+    client_uuid        VARCHAR(64),
+    synced_from_client BOOLEAN NOT NULL DEFAULT FALSE,
+    accepted           BOOLEAN NOT NULL DEFAULT FALSE,
+    review_reason      TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_presence_qr_nonce
+    ON presence_events (session_id, matric_number, qr_nonce)
+    WHERE qr_nonce IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_presence_session_matric
+    ON presence_events (session_id, matric_number, observed_at);
+
+CREATE TABLE IF NOT EXISTS attendance_outcomes (
+    session_id        UUID NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    matric_number     VARCHAR(20) NOT NULL REFERENCES students(matric_number),
+    status            VARCHAR(20) NOT NULL CHECK (
+                          status IN ('present', 'left_early', 'absent', 'exempted', 'pending_review')
+                      ),
+    counts_as_present BOOLEAN NOT NULL DEFAULT FALSE,
+    reason            TEXT,
+    evidence          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    finalized_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finalized_by      VARCHAR(30) NOT NULL DEFAULT 'policy',
+    PRIMARY KEY (session_id, matric_number)
+);
+
+CREATE TABLE IF NOT EXISTS presence_exemptions (
+    id               BIGSERIAL PRIMARY KEY,
+    token_hash       VARCHAR(64) NOT NULL UNIQUE,
+    session_id       UUID NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    matric_number    VARCHAR(20) NOT NULL REFERENCES students(matric_number),
+    reason           TEXT NOT NULL,
+    created_by       INT NOT NULL REFERENCES users(id),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at       TIMESTAMPTZ NOT NULL,
+    used_at          TIMESTAMPTZ,
+    revoked_at       TIMESTAMPTZ,
+    counts_as_present BOOLEAN NOT NULL DEFAULT TRUE,
+    claim_ip         VARCHAR(64),
+    claim_user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_exemptions_session
+    ON presence_exemptions (session_id, created_at DESC);

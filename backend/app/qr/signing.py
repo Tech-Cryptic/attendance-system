@@ -37,3 +37,41 @@ def verify_session_payload(payload_str: str, signature: str) -> dict | None:
     if not hmac.compare_digest(expected, signature):
         return None
     return json.loads(payload_str)
+
+
+def sign_checkpoint_payload(
+    session_id: str,
+    course_code: str,
+    checkpoint_id: str,
+    event_type: str,
+    nonce: str,
+    expires_at: str,
+) -> dict:
+    """
+    Sign a short-lived checkpoint QR.
+
+    Teaching note:
+    The original session QR answers "did the student join this session?".
+    A checkpoint QR answers "was the student still here at time T?". Adding
+    a random nonce to the signed payload means an old screenshot cannot be
+    replayed forever: the server stores every accepted nonce.
+    """
+    payload = {
+        "session_id":   session_id,
+        "course_code":  course_code,
+        "checkpoint_id": checkpoint_id,
+        "event_type":   event_type,
+        "nonce":        nonce,
+        "expires_at":   expires_at,
+    }
+    payload_str = json.dumps(payload, sort_keys=True)
+    signature = hmac.new(HMAC_KEY, payload_str.encode(), hashlib.sha256).hexdigest()
+    return {"payload": payload_str, "signature": signature}
+
+
+def verify_checkpoint_payload(payload_str: str, signature: str) -> dict | None:
+    """Verify a checkpoint QR payload. Returns parsed dict if valid, None if tampered."""
+    expected = hmac.new(HMAC_KEY, payload_str.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        return None
+    return json.loads(payload_str)

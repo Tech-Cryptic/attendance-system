@@ -10,6 +10,7 @@ from app.routes import enroll
 from app.routes import attendance
 from app.routes import admin
 from app.routes import batch_attendance
+from app.routes import presence
 from app.auth import router as auth_router
 
 load_dotenv()
@@ -35,6 +36,7 @@ app.include_router(auth_router.router)
 app.include_router(enroll.router)
 app.include_router(attendance.router)
 app.include_router(batch_attendance.router)
+app.include_router(presence.router)
 app.include_router(admin.router)
 app.include_router(admin.lecturer_router)
 

@@ -41,3 +41,9 @@ frontend/.env.*.local
 *.yaml
 *.sql
 
+# Schema and idempotent migrations are source code, not documents.
+!backend/schema.sql
+!backend/requirements-dev.txt
+!backend/migrations/
+!backend/migrations/*.sql
+

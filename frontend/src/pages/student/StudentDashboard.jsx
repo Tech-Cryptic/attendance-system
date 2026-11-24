@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Sidebar from '../../components/Sidebar'
 import { useAuth } from '../../context/AuthContext'
 import { onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
+import { getPresencePendingCount } from '../../lib/presence'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
 
@@ -64,8 +65,11 @@ export default function StudentDashboard() {
       checkFallback()
     }
 
-    getPendingCount().then(setPending)
-    const unsub = onSyncEvent(async () => setPending(await getPendingCount()))
+    async function refreshPending() {
+      setPending((await getPendingCount()) + (await getPresencePendingCount()))
+    }
+    refreshPending()
+    const unsub = onSyncEvent(refreshPending)
 
     const onOnline  = () => setIsOnline(true)
     const onOffline = () => setIsOnline(false)
@@ -294,10 +298,15 @@ export default function StudentDashboard() {
                         {!a.method                      && <span className="badge badge-success">Live</span>}
                       </td>
                       <td>
-                        {a.synced_from_client
-                          ? <span className="badge badge-info">Synced</span>
-                          : <span className="badge badge-success">Live</span>
-                        }
+                        {a.presence_status === 'present'        && <span className="badge badge-success">Present</span>}
+                        {a.presence_status === 'exempted'       && <span className="badge badge-warning">Exempted</span>}
+                        {a.presence_status === 'left_early'     && <span className="badge badge-danger">Left early</span>}
+                        {a.presence_status === 'pending_review' && <span className="badge badge-warning">For review</span>}
+                        {!a.presence_status && (
+                          a.synced_from_client
+                            ? <span className="badge badge-info">Synced</span>
+                            : <span className="badge badge-success">Live</span>
+                        )}
                       </td>
                     </tr>
                   ))}

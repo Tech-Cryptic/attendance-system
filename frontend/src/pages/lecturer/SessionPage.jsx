@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
+import ExemptionPanel from '../../components/ExemptionPanel'
+import { toast } from '../../components/Toast'
 
 
 function authHeaders(token) {
@@ -27,6 +29,8 @@ export default function SessionPage() {
   const [pollError,      setPollError]      = useState('')
   const [timeLeft,       setTimeLeft]       = useState(null)   // seconds remaining
   const [ending,         setEnding]         = useState(false)
+  const [checkpointQr,   setCheckpointQr]   = useState(null)
+  const [checkpointError,setCheckpointError]= useState('')
 
   const pollRef  = useRef(null)
   const timerRef = useRef(null)
@@ -108,17 +112,57 @@ export default function SessionPage() {
     }
   }
 
+  // ── Presence checkpoints ──────────────────────────────────────
+  async function generateCheckpoint(eventType) {
+    if (!session) return
+    setCheckpointError('')
+    try {
+      const res = await fetch(`${API_BASE}/presence/checkpoints`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          session_id: session.session_id,
+          event_type: eventType,
+          label: eventType === 'check_out' ? 'End of lecture' : 'Mid-lecture check',
+          expires_in_minutes: 10,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? 'Could not generate QR.')
+
+      const content = JSON.stringify({ payload: data.qr_payload, signature: data.qr_signature })
+      const url = await QRCode.toDataURL(content, {
+        width: 320, margin: 2,
+        color: { dark: '#0a0a1a', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+      setCheckpointQr({ url, eventType, label: data.label ?? eventType })
+      toast.success(`${eventType === 'check_out' ? 'Check-out' : 'Checkpoint'} QR ready.`)
+    } catch (err) {
+      setCheckpointError(err.message)
+    }
+  }
+
   // ── End session ───────────────────────────────────────────────
   async function handleEndSession() {
     if (!session) return
     setEnding(true)
     try {
-      await fetch(`${API_BASE}/sessions/${session.session_id}/end`, {
+      const res = await fetch(`${API_BASE}/sessions/${session.session_id}/end`, {
         method: 'POST', headers: authHeaders(token)
       })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? 'Could not end session.')
+
       clearInterval(pollRef.current)
       clearInterval(timerRef.current)
       setSession(prev => ({ ...prev, active: false }))
+      toast.success(
+        `Session ended. Presence: ${data.presence_summary?.present ?? 0} present, ` +
+        `${data.presence_summary?.pending_review ?? 0} for review.`
+      )
+    } catch (err) {
+      toast.error(err.message)
     } finally {
       setEnding(false)
     }
@@ -327,6 +371,38 @@ export default function SessionPage() {
                   {session.session_id.slice(0, 8)}…
                 </span>
               </div>
+
+              {/* Continuity proof: scan a midpoint QR, then a check-out QR. */}
+              <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-default)', paddingTop: '16px' }}>
+                <p className="text-sm text-secondary" style={{ marginBottom: '10px' }}>
+                  Generate a short-lived QR when you want to confirm students are still in class.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => generateCheckpoint('checkpoint')}
+                    disabled={!session.active}
+                  >
+                    Midpoint check
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => generateCheckpoint('check_out')}
+                    disabled={!session.active}
+                  >
+                    End-of-class check-out
+                  </button>
+                </div>
+                {checkpointError && <p className="form-error">{checkpointError}</p>}
+                {checkpointQr && (
+                  <div style={{ marginTop: '14px' }}>
+                    <p className="text-sm text-muted">{checkpointQr.label} (valid 10 minutes)</p>
+                    <div className="qr-box" style={{ margin: '12px auto 0' }}>
+                      <img src={checkpointQr.url} alt={`${checkpointQr.eventType} QR code`} width={220} height={220} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ── Batch Scan — Primary attendance method ── */}
@@ -421,6 +497,8 @@ export default function SessionPage() {
                 </div>
               )}
             </div>
+
+            {!session.active && <ExemptionPanel session={session} />}
           </div>
         )}
       </div>

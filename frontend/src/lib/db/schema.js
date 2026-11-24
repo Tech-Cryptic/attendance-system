@@ -59,4 +59,29 @@ db.version(2).stores({
   appState: 'key',
 })
 
+// v3 — presence evidence queue
+db.version(3).stores({
+  students: 'matric_number, full_name, course_code, enrolled_at, high_similarity_flag',
+  embeddings: 'matric_number, course_code',
+  biometricStore: '[matric_number+course_code], course_code, cached_at',
+  sessions: 'session_id, course_code, lecturer_id, expires_at, active',
+
+  /**
+   * attendanceQueue — unchanged v2 biometric records.
+   */
+  attendanceQueue: '++id, session_id, status, createdAt, client_uuid',
+
+  /**
+   * presenceQueue — off-device proof that a student stayed for a lecture.
+   *
+   * `event_id` is generated with crypto.randomUUID() before the device has
+   * network. It is the idempotency key used by POST /presence/events, so a
+   * retry after a timeout can never create a duplicate event.
+   */
+  presenceQueue: '++id, event_id, session_id, matric_number, event_type, status, observedAt, client_uuid',
+
+  syncLog: '++id, session_id, synced_at, record_count',
+  appState: 'key',
+})
+
 export default db

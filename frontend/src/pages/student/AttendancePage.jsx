@@ -6,6 +6,7 @@ import FaceCamera from '../../components/FaceCamera'
 import LivenessGate from '../../components/LivenessGate'
 import { matchEmbedding, averageEmbeddings } from '../../lib/faceai/detector'
 import { queueAttendance, onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
+import { queueQrPresenceEvent, getPresencePendingCount } from '../../lib/presence'
 import db from '../../lib/db/schema'
 import { API_BASE } from '../../lib/api'
 import {
@@ -22,7 +23,7 @@ const CAPTURE_FRAMES = 5
 const STEPS = ['Scan QR', 'Liveness', 'Matching', 'Done']
 
 export default function AttendancePage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [step, setStep] = useState(0)
 
   // Step 0 — QR scan
@@ -92,7 +93,7 @@ export default function AttendancePage() {
     window.addEventListener('offline', handleOffline)
     // Sync events → update pending count
     const unsub = onSyncEvent(async () => {
-      setPendingCount(await getPendingCount())
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
     })
     return () => {
       window.removeEventListener('online',  handleOnline)
@@ -128,8 +129,9 @@ export default function AttendancePage() {
     }
   }, [step, manualEntry])
 
-  function handleQRSuccess(text, scanner) {
+  async function handleQRSuccess(text, scanner) {
     scanner?.clear().catch(() => {})
+
     try {
       const parsed = JSON.parse(text)
       const { payload, signature } = parsed
@@ -137,20 +139,40 @@ export default function AttendancePage() {
 
       const data = JSON.parse(payload)
       const { session_id, course_code, expires_at } = data
-
       if (!session_id || !course_code) throw new Error('Missing session fields in QR')
 
-      // Basic client-side expiry check
       if (expires_at && new Date(expires_at) < new Date()) {
-        setScanError('This session has expired. Ask your lecturer to start a new one.')
+        setScanError('This QR has expired. Ask your lecturer to generate a new one.')
+        return
+      }
+
+      /*
+       * Teaching note:
+       * Two kinds of QR can reach this scanner.
+       *   - Session QR → check-in, then the face/liveness flow runs.
+       *   - Checkpoint / check-out QR → continuity proof only. No face scan is
+       *     needed; the important thing is recording the event locally NOW and
+       *     syncing it later when the network returns.
+       */
+      await queueQrPresenceEvent({
+        payload,
+        signature,
+        matricNumber: user?.matric_number,
+        fallbackType: 'check_in',
+      })
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
+
+      if (data.event_type === 'checkpoint' || data.event_type === 'check_out') {
+        setScanError('')
+        setStep(3) // → Done; this is a presence check, not a new biometric mark
         return
       }
 
       setSessionData({ session_id, course_code, expires_at, qr_payload: payload, qr_signature: signature })
       setScanError('')
-      setStep(1)  // → Liveness
+      setStep(1) // → Liveness
     } catch (e) {
-      setScanError('Invalid QR code. Please scan the lecturer\'s session QR.')
+      setScanError('Invalid QR code. Please scan the lecturer\'s QR.')
     }
   }
 
@@ -249,7 +271,7 @@ export default function AttendancePage() {
           setStep(5)  // → Behavioral Verification UI
         } else {
           await queueAttendance(payload)
-          setPendingCount(await getPendingCount())
+          setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
           setStep(3)  // → Done
         }
 
@@ -310,7 +332,7 @@ export default function AttendancePage() {
         method: 'face_disambiguated'
       })
 
-      setPendingCount(await getPendingCount())
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
       setStep(3) // → Done
     } catch (err) {
       setMatchError(err.message)

@@ -29,6 +29,30 @@ except ImportError:
 _raw_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres123@localhost:5432/attendance_db")
 DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url else None
 
+
+def apply_migrations(cur):
+    """
+    Apply every SQL file in backend/migrations in filename order.
+
+    Teaching note:
+    start.sh runs this script on every Render deploy. A traditional migration
+    tool would track applied versions in a table. Here we keep the same safety
+    by writing idempotent SQL (ADD COLUMN IF NOT EXISTS / CREATE TABLE IF NOT
+    EXISTS). Running a migration twice therefore has no additional effect.
+    """
+    migration_dir = os.path.join(os.path.dirname(__file__), "migrations")
+    if not os.path.isdir(migration_dir):
+        return
+
+    for filename in sorted(os.listdir(migration_dir)):
+        if not filename.endswith(".sql"):
+            continue
+        path = os.path.join(migration_dir, filename)
+        with open(path, "r", encoding="utf-8") as f:
+            cur.execute(f.read())
+        print(f"   ✅ Applied migration {filename}")
+
+
 # ── Accounts to seed ──────────────────────────────────────────
 ACCOUNTS = [
     {
@@ -41,7 +65,7 @@ ACCOUNTS = [
         "email":     "lecturer@unilorin.edu.ng",
         "password":  "Lecturer1234!",
         "role":      "lecturer",
-        "full_name": "Dr. Tinuke Oladele",
+        "full_name": "Prof. Tinuke Oladele",
     },
     {
         "email":        "student@unilorin.edu.ng",
@@ -104,6 +128,13 @@ def main():
             print("   ✅ Schema applied successfully.")
         else:
             print("\n📝 Schema check: tables already exist. Skipping schema apply.")
+
+        # Migrations run on both fresh and existing databases. On a fresh DB
+        # schema.sql already contains these changes, but IF NOT EXISTS makes
+        # re-running them harmless.
+        print("\n📝 Applying presence migrations…")
+        apply_migrations(cur)
+        conn.commit()
     except Exception as e:
         conn.rollback()
         print(f"❌ Error checking/applying schema: {e}")

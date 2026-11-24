@@ -203,7 +203,7 @@ export default function BatchScanPage() {
     }
     setSubmitting(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const payload = {
         session_id: sessionId,
         records: confirmedMatches.map(m => ({
@@ -211,7 +211,7 @@ export default function BatchScanPage() {
           similarity_distance: m.similarity_distance,
           confidence_band:     m.confidence_band,
         })),
-        client_uuid: localStorage.getItem('clientUUID') || 'web',
+        client_uuid: localStorage.getItem('faceattend_client_uuid') || 'web',
       }
       const res = await fetch(`${API_BASE}/attendance/batch`, {
         method:  'POST',
@@ -240,7 +240,7 @@ export default function BatchScanPage() {
   // ── Refresh session status ────────────────────────────────
   async function refreshStatus() {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const res = await fetch(`${API_BASE}/attendance/session/${sessionId}/status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -253,7 +253,7 @@ export default function BatchScanPage() {
   async function releaseFallback() {
     setFallbackReleasing(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const res = await fetch(`${API_BASE}/attendance/fallback-release`, {
         method:  'POST',
         headers: {
