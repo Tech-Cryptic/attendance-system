@@ -171,12 +171,6 @@ export default function LoginPage() {
         <p className="text-center text-sm" style={{ marginTop: '12px', color: 'var(--text-muted)' }}>
           Use the enrollment link sent to you by your lecturer to register your face biometric.
         </p>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-muted" style={{ marginTop: '32px', lineHeight: '1.8' }}>
-          Facial processing runs on-device<br/>
-          University of Ilorin — Computer Science Dept.
-        </p>
       </div>
     </div>
   )
