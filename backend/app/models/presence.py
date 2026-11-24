@@ -101,3 +101,44 @@ class ExemptionClaimResponse(BaseModel):
     matric_number: str
     counts_as_present: bool
     message: str
+
+
+class ReviewEntities(BaseModel):
+    """
+    Structured extraction output from the review LLM.
+
+    `route_to` is deliberately advisory. The UI shows it, but the final human
+    decision controls the outcome.
+    """
+    course_code: Optional[str] = Field(default=None, max_length=20)
+    session_id: Optional[str] = Field(default=None, max_length=64)
+    event_types: list[str] = Field(default_factory=list, max_length=20)
+    signals: list[str] = Field(default_factory=list, max_length=20)
+    issues: list[str] = Field(default_factory=list, max_length=20)
+    route_to: Literal['lecturer', 'admin', 'student'] = 'lecturer'
+
+
+class LLMReviewSuggestion(BaseModel):
+    """
+    Strict output contract for the LLM.
+
+    The model is never allowed to write attendance_outcomes directly. It can
+    only produce this validated object, which a lecturer must then approve or
+    override.
+    """
+    recommended_status: Literal['present', 'left_early', 'absent', 'exempted', 'pending_review']
+    confidence: float = Field(..., ge=0, le=1)
+    reason_summary: str = Field(..., min_length=10, max_length=500)
+    entities: ReviewEntities
+    draft_message: str = Field(..., min_length=10, max_length=1000)
+
+
+class ReviewGenerateRequest(BaseModel):
+    session_id: UUID
+    matric_number: str = Field(..., max_length=20)
+
+
+class ReviewDecisionRequest(BaseModel):
+    action: Literal['approve', 'override', 'reject']
+    final_status: Optional[Literal['present', 'left_early', 'absent', 'exempted', 'pending_review']] = None
+    note: str = Field(default='', max_length=500)

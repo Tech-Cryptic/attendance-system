@@ -155,7 +155,37 @@ Configure expected signals when creating a session:
 
 The server compares reported signals only against this configured list. Unknown signals are never treated as proof.
 
-## 10. Privacy / NDPR notes
+## 10. LLM-assisted review workflow
+
+When the rule engine returns `pending_review`, a lecturer can request an LLM review from the ended session page.
+
+```text
+pending_review outcome
+   → server builds a compact evidence payload
+   → OpenAI-compatible LLM returns strict JSON
+   → Pydantic validates the suggestion
+   → lecturer approves, overrides, or rejects
+   → attendance_outcomes changes only after the human decision
+```
+
+The validated JSON contains:
+
+- `recommended_status`
+- `confidence`
+- `reason_summary`
+- `entities` with extracted course, session, signals, issues, and `route_to`
+- `draft_message` for the student
+
+Safety rules:
+
+- The LLM has no database access and never writes `attendance_outcomes`.
+- Invalid JSON or an API failure falls back to conservative deterministic rules.
+- `llm_presence_reviews`, `llm_review_decisions`, and `llm_review_audit` store suggestions, human decisions, and non-sensitive metadata.
+- The raw prompt is not logged because it contains student evidence.
+
+Configure the workflow with `OPENAI_API_KEY`, optional `OPENAI_MODEL`, and optional `OPENAI_BASE_URL` for OpenAI-compatible providers.
+
+## 11. Privacy / NDPR notes
 
 - Store coarse evidence (`within_venue: true/false`, timestamp, signal ID), not continuous location tracks.
 - GPS is captured only during an attendance session and only with browser permission.
@@ -163,7 +193,7 @@ The server compares reported signals only against this configured list. Unknown 
 - Only token hashes are stored.
 - The exemption reason is visible to admin/lecturer audits, so it must not contain sensitive medical details.
 
-## 11. API summary
+## 12. API summary
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
@@ -174,3 +204,6 @@ The server compares reported signals only against this configured list. Unknown 
 | POST | `/presence/exemptions` | lecturer/admin | Issue one-time claim link |
 | GET | `/presence/exemptions/{token}/preview` | public | Show course/status before claiming |
 | POST | `/presence/exemptions/{token}/claim` | student | Claim from any device |
+| POST | `/presence/reviews/generate` | lecturer/admin | Generate validated LLM suggestion |
+| GET | `/presence/reviews?session_id=` | lecturer/admin | List suggestions and decisions |
+| POST | `/presence/reviews/{id}/decision` | lecturer/admin | Approve, override, or reject suggestion |

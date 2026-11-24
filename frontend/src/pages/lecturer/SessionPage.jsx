@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
 import ExemptionPanel from '../../components/ExemptionPanel'
+import PresenceReviewPanel from '../../components/PresenceReviewPanel'
 import { toast } from '../../components/Toast'
 
 
@@ -26,6 +27,7 @@ export default function SessionPage() {
   const [session,        setSession]        = useState(null)   // active session data
   const [qrDataURL,      setQrDataURL]      = useState(null)
   const [attendance,     setAttendance]     = useState([])
+  const [outcomes,       setOutcomes]       = useState([])
   const [pollError,      setPollError]      = useState('')
   const [timeLeft,       setTimeLeft]       = useState(null)   // seconds remaining
   const [ending,         setEnding]         = useState(false)
@@ -41,7 +43,9 @@ export default function SessionPage() {
       try {
         const res = await fetch(`${API_BASE}/lecturer/courses`, { headers: authHeaders(token) })
         if (res.ok) setCourses(await res.json())
-      } catch {}
+      } catch {
+        setCourses([])
+      }
     }
     load()
   }, [token])
@@ -79,6 +83,38 @@ export default function SessionPage() {
     pollRef.current = setInterval(poll, 5000)
     return () => clearInterval(pollRef.current)
   }, [session, token])
+
+  async function loadOutcomes() {
+    if (!session?.session_id) return
+    try {
+      const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
+        headers: authHeaders(token)
+      })
+      if (res.ok) setOutcomes(await res.json())
+    } catch {
+      setOutcomes([])
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.session_id || session.active) return undefined
+    let cancelled = false
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
+          headers: authHeaders(token)
+        })
+        const data = await res.json()
+        if (res.ok && !cancelled) setOutcomes(data)
+      } catch {
+        if (!cancelled) setOutcomes([])
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [session?.session_id, session?.active, token])
 
   // ── Create session ────────────────────────────────────────────
   async function handleCreateSession(e) {
@@ -456,7 +492,7 @@ export default function SessionPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {attendance.map((rec, i) => (
+                  {attendance.map((rec) => (
                     <div key={rec.matric_number} className="record-enter" style={{
                       display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
                       padding: 'var(--sp-2) var(--sp-4)',
@@ -498,7 +534,16 @@ export default function SessionPage() {
               )}
             </div>
 
-            {!session.active && <ExemptionPanel session={session} />}
+            {!session.active && (
+              <>
+                <PresenceReviewPanel
+                  session={session}
+                  outcomes={outcomes}
+                  onDecision={loadOutcomes}
+                />
+                <ExemptionPanel session={session} />
+              </>
+            )}
           </div>
         )}
       </div>

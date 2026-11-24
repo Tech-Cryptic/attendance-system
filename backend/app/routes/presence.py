@@ -27,6 +27,8 @@ from app.models.presence import (
     ExemptionCreateRequest,
     ExemptionPreview,
     PresenceEventsBatch,
+    ReviewDecisionRequest,
+    ReviewGenerateRequest,
 )
 from app.qr.signing import (
     sign_checkpoint_payload,
@@ -34,6 +36,7 @@ from app.qr.signing import (
     verify_session_payload,
 )
 from app.services.presence_policy import evaluate_presence
+from app.services.llm_review import generate_llm_review
 
 router = APIRouter()
 
@@ -64,12 +67,29 @@ def _session_row(cur, session_id):
     return cur.fetchone()
 
 
-def _require_lecturer_owner(session, actor):
-    """Object-level authorisation: lecturers may only touch their own sessions."""
+def _require_owner(lecturer_id, actor):
+    """Object-level authorisation shared by every presence workflow."""
     if actor.get('role') == 'admin':
         return
-    if session is None or int(session[2]) != int(actor['sub']):
+    if lecturer_id is None or int(lecturer_id) != int(actor['sub']):
         raise HTTPException(status_code=403, detail='This session belongs to another lecturer.')
+
+
+def _require_lecturer_owner(session, actor):
+    """Object-level authorisation: lecturers may only touch their own sessions."""
+    if session is None:
+        raise HTTPException(status_code=404, detail='Session not found.')
+    _require_owner(session[2], actor)
+
+
+def _audit(cur, *, review_id, session_id, matric_number, action, actor_id, detail):
+    """Append-only audit record for generation and human decisions."""
+    cur.execute(
+        """INSERT INTO llm_review_audit
+           (review_id, session_id, matric_number, action, actor_id, detail)
+           VALUES (%s,%s,%s,%s,%s,%s)""",
+        (review_id, session_id, matric_number, action, actor_id, Json(detail)),
+    )
 
 
 # ── Checkpoint QR generation (lecturer) ──────────────────────────────
@@ -661,5 +681,267 @@ def claim_exemption(
     except Exception:
         conn.rollback()
         raise HTTPException(status_code=500, detail='Could not claim exemption.')
+    finally:
+        release_connection(conn)
+
+
+# ── LLM-assisted review (advisory, human-approved) ──────────────────
+
+@router.post('/presence/reviews/generate')
+def generate_review(
+    req: ReviewGenerateRequest,
+    actor: dict = Depends(require_roles('lecturer', 'admin')),
+):
+    """
+    Generate a validated LLM suggestion for one pending-review outcome.
+
+    The LLM output is stored, never applied. A separate human decision endpoint
+    is the only way to change attendance_outcomes from this workflow.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        session = _session_row(cur, req.session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail='Session not found.')
+        _require_lecturer_owner(session, actor)
+
+        cur.execute(
+            """SELECT status, reason, evidence
+               FROM attendance_outcomes
+               WHERE session_id = %s AND matric_number = %s""",
+            (req.session_id, req.matric_number),
+        )
+        outcome = cur.fetchone()
+        if not outcome:
+            raise HTTPException(status_code=404, detail='Outcome not found for this student.')
+        if outcome[0] != 'pending_review':
+            raise HTTPException(status_code=400, detail='Only pending_review outcomes can be reviewed.')
+
+        cur.execute(
+            """SELECT reason FROM presence_exemptions
+               WHERE session_id = %s AND matric_number = %s
+                 AND used_at IS NOT NULL AND revoked_at IS NULL
+               ORDER BY used_at DESC LIMIT 1""",
+            (req.session_id, req.matric_number),
+        )
+        exemption_row = cur.fetchone()
+
+        context = {
+            'session_id': str(req.session_id),
+            'course_code': session[1],
+            'matric_number': req.matric_number,
+            'session_start': session[3].isoformat() if session[3] else None,
+            'session_end': session[4].isoformat() if session[4] else None,
+            'policy_reason': outcome[1],
+            'evidence': outcome[2] or {},
+            'exemption_reason': exemption_row[0] if exemption_row else None,
+        }
+
+        suggestion, meta = generate_llm_review(context)
+
+        cur.execute(
+            """INSERT INTO llm_presence_reviews
+               (session_id, matric_number, recommended_status, confidence,
+                reason_summary, entities, draft_message, model, prompt_version,
+                fallback_used, fallback_reason, raw_response, created_by)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               RETURNING id, created_at""",
+            (
+                req.session_id, req.matric_number, suggestion.recommended_status,
+                suggestion.confidence, suggestion.reason_summary,
+                Json(suggestion.entities.model_dump()), suggestion.draft_message,
+                meta['model'], meta['prompt_version'], meta['fallback_used'],
+                meta['fallback_reason'],
+                Json(meta['raw_response']) if meta['raw_response'] else None,
+                int(actor['sub']),
+            ),
+        )
+        review_id, created_at = cur.fetchone()
+
+        _audit(
+            cur,
+            review_id=review_id,
+            session_id=req.session_id,
+            matric_number=req.matric_number,
+            action='generated',
+            actor_id=int(actor['sub']),
+            detail={
+                'model': meta['model'],
+                'prompt_version': meta['prompt_version'],
+                'fallback_used': meta['fallback_used'],
+                'fallback_reason': meta['fallback_reason'],
+                'confidence': suggestion.confidence,
+            },
+        )
+        conn.commit()
+        cur.close()
+
+        return {
+            'id': review_id,
+            'session_id': str(req.session_id),
+            'matric_number': req.matric_number,
+            'recommended_status': suggestion.recommended_status,
+            'confidence': suggestion.confidence,
+            'reason_summary': suggestion.reason_summary,
+            'entities': suggestion.entities.model_dump(),
+            'draft_message': suggestion.draft_message,
+            'model': meta['model'],
+            'fallback_used': meta['fallback_used'],
+            'created_at': created_at.isoformat(),
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail='Could not generate LLM review.')
+    finally:
+        release_connection(conn)
+
+
+@router.get('/presence/reviews')
+def list_reviews(
+    session_id: uuid.UUID,
+    actor: dict = Depends(require_roles('lecturer', 'admin')),
+):
+    """List generated suggestions and the latest human decision for a session."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        session = _session_row(cur, session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail='Session not found.')
+        _require_lecturer_owner(session, actor)
+
+        cur.execute(
+            """SELECT r.id, r.matric_number, st.full_name, r.recommended_status,
+                      r.confidence, r.reason_summary, r.entities, r.draft_message,
+                      r.model, r.prompt_version, r.fallback_used, r.fallback_reason,
+                      r.created_at, d.action, d.final_status, d.note, d.decided_at
+               FROM llm_presence_reviews r
+               JOIN students st ON st.matric_number = r.matric_number
+               LEFT JOIN LATERAL (
+                   SELECT action, final_status, note, decided_at
+                   FROM llm_review_decisions
+                   WHERE review_id = r.id ORDER BY decided_at DESC LIMIT 1
+               ) d ON TRUE
+               WHERE r.session_id = %s
+               ORDER BY r.created_at DESC""",
+            (session_id,),
+        )
+        rows = cur.fetchall()
+        cur.close()
+        return [
+            {
+                'id': r[0], 'matric_number': r[1], 'full_name': r[2],
+                'recommended_status': r[3],
+                'confidence': float(r[4]) if r[4] is not None else None,
+                'reason_summary': r[5], 'entities': r[6],
+                'draft_message': r[7], 'model': r[8],
+                'prompt_version': r[9], 'fallback_used': r[10],
+                'fallback_reason': r[11], 'created_at': r[12].isoformat(),
+                'decision_action': r[13], 'final_status': r[14],
+                'decision_note': r[15],
+                'decided_at': r[16].isoformat() if r[16] else None,
+            }
+            for r in rows
+        ]
+    finally:
+        release_connection(conn)
+
+
+@router.post('/presence/reviews/{review_id}/decision')
+def decide_review(
+    review_id: int,
+    req: ReviewDecisionRequest,
+    actor: dict = Depends(require_roles('lecturer', 'admin')),
+):
+    """
+    Apply a human decision to an LLM suggestion.
+
+    `approve` and `override` update the authoritative outcome. `reject` leaves
+    the outcome as pending_review and only records the audit decision.
+    """
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """SELECT r.session_id, r.matric_number, r.recommended_status, s.lecturer_id
+               FROM llm_presence_reviews r
+               JOIN sessions s ON s.session_id = r.session_id
+               WHERE r.id = %s""",
+            (review_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail='Review not found.')
+        session_id, matric_number, recommended_status, lecturer_id = row
+        _require_owner(lecturer_id, actor)
+
+        if req.action == 'override' and not req.final_status:
+            raise HTTPException(status_code=400, detail='Override requires final_status.')
+
+        if req.action == 'approve':
+            final_status = recommended_status
+        elif req.action == 'override':
+            final_status = req.final_status
+        else:
+            final_status = None
+
+        if req.action != 'reject':
+            reason = f'Human-approved LLM review ({req.action}): {req.note or recommended_status}'
+            cur.execute(
+                """UPDATE attendance_outcomes
+                   SET status = %s, counts_as_present = %s, reason = %s,
+                       finalized_at = %s, finalized_by = 'human_review'
+                   WHERE session_id = %s AND matric_number = %s""",
+                (
+                    final_status,
+                    final_status in ('present', 'exempted'),
+                    reason,
+                    datetime.now(timezone.utc),
+                    session_id,
+                    matric_number,
+                ),
+            )
+
+        cur.execute(
+            """INSERT INTO llm_review_decisions
+               (review_id, session_id, matric_number, action, final_status, note, decided_by)
+               VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+            (
+                review_id, session_id, matric_number, req.action,
+                final_status, req.note, int(actor['sub']),
+            ),
+        )
+        _audit(
+            cur,
+            review_id=review_id,
+            session_id=session_id,
+            matric_number=matric_number,
+            action='decision',
+            actor_id=int(actor['sub']),
+            detail={
+                'action': req.action,
+                'final_status': final_status,
+                'note': req.note,
+            },
+        )
+        conn.commit()
+        cur.close()
+        return {
+            'status': 'recorded',
+            'review_id': review_id,
+            'action': req.action,
+            'final_status': final_status,
+            'outcome_updated': req.action != 'reject',
+        }
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail='Could not record review decision.')
     finally:
         release_connection(conn)
