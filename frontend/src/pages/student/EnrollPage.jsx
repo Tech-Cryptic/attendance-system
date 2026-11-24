@@ -46,7 +46,6 @@ export default function EnrollPage() {
   const [livenessStatus, setLivenessStatus]   = useState(null)
   const [rppgStatus,     setRppgStatus]        = useState(null)
   const [captureProgress, setCaptureProgress]  = useState(0)
-  const [capturedEmbeddings, setCapturedEmbeddings] = useState([])
   const [isCapturing, setIsCapturing]          = useState(false)
 
   // Step 5: Submission
@@ -170,7 +169,6 @@ export default function EnrollPage() {
         }
       }
 
-      setCapturedEmbeddings(collected)
       setIsCapturing(false)
 
       // Auto-submit
@@ -401,7 +399,7 @@ export default function EnrollPage() {
           <div className="card fade-in-up" style={{ padding: '24px' }}>
             <div style={{ marginBottom: '16px' }}>
               <h3 style={{ margin: 0 }}>
-                {step === 2 ? '👁 Liveness Verification' : '📸 Capturing Biometric'}
+                {step === 2 ? 'Liveness Verification' : 'Capturing Biometric'}
               </h3>
               <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
                 {step === 2
@@ -460,7 +458,7 @@ export default function EnrollPage() {
                 style={{ marginTop: '16px' }}
                 onClick={() => faceCamRef.current?.resetLiveness()}
               >
-                🔄 Retry Liveness Check
+                Retry Liveness Check
               </button>
             )}
           </div>
@@ -476,7 +474,7 @@ export default function EnrollPage() {
               display: 'grid', placeItems: 'center', fontSize: '32px',
               boxShadow: '0 0 30px rgba(16,185,129,0.3)',
             }}>
-              ✅
+              ✓
             </div>
 
             <h2 style={{ marginBottom: '8px' }}>Enrollment Complete!</h2>
@@ -490,7 +488,7 @@ export default function EnrollPage() {
             {/* Twin flag warning */}
             {enrollResult.high_similarity_flag && (
               <div className="alert alert-warning" style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <strong>⚠️ High Similarity Flag:</strong> Your facial embedding closely matches another enrolled student. Your attendance will require additional behavioural verification. Please inform your lecturer.
+                <strong>High similarity flag:</strong> Your facial embedding closely matches another enrolled student. Your attendance will require additional behavioural verification. Please inform your lecturer.
               </div>
             )}
 
@@ -510,7 +508,7 @@ export default function EnrollPage() {
                     className="btn btn-ghost btn-sm"
                     id="btn-download-qr"
                   >
-                    📥 Download QR Code
+                    Download QR Code
                   </a>
                 </div>
               </div>
@@ -525,7 +523,7 @@ export default function EnrollPage() {
               fontSize: '12px', color: 'var(--text-muted)', textAlign: 'left',
               marginBottom: '24px',
             }}>
-              🔒 Your raw facial images were never stored or transmitted. Only a 1024-dimensional mathematical vector was processed entirely on your device (NDPR compliant).
+              Raw facial images are not stored or transmitted. Only a facial embedding is processed on your device.
             </div>
 
             <button id="btn-enroll-done" className="btn btn-primary btn-full" onClick={() => navigate('/login')}>
@@ -537,7 +535,7 @@ export default function EnrollPage() {
         {/* ── STEP 6: Behavioral Biometrics Capture ─── */}
         {step === 5 && (
           <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '8px' }}>⚠️ Behavioral Verification Setup</h3>
+            <h3 style={{ marginBottom: '8px' }}>Behavioral Verification Setup</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               Your face embedding matches a look-alike student. We need to collect touch, device motion, and typing dynamics to secure your identity.
             </p>
@@ -563,7 +561,7 @@ export default function EnrollPage() {
                 }}
               >
                 <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
-                  Draw a circle or path here 🔄
+                  Draw a circle or path here
                 </span>
               </div>
             </div>

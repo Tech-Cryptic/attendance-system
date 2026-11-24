@@ -1,0 +1,124 @@
+"""Request and response models for presence evidence and reviews."""
+
+from datetime import datetime
+from typing import Optional, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class PresencePolicyFields(BaseModel):
+    """
+    Optional session settings. `full_session` is the only policy in v1, but
+    the thresholds are configurable so lecturers can tune strictness.
+    """
+    required_checkpoints: int = Field(default=1, ge=0, le=10)
+    grace_minutes: int = Field(default=5, ge=0, le=60)
+    venue_lat: Optional[float] = Field(default=None, ge=-90, le=90)
+    venue_lon: Optional[float] = Field(default=None, ge=-180, le=180)
+    venue_radius_m: int = Field(default=100, ge=10, le=5000)
+    venue_ssids: list[str] = Field(default_factory=list, max_length=20)
+    venue_beacon_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+class CheckpointCreateRequest(BaseModel):
+    session_id: UUID
+    event_type: Literal['checkpoint', 'check_out']
+    label: Optional[str] = Field(default=None, max_length=100)
+    expires_in_minutes: int = Field(default=10, ge=1, le=120)
+
+
+class CheckpointOut(BaseModel):
+    session_id: UUID
+    checkpoint_id: UUID
+    event_type: str
+    qr_payload: str
+    qr_signature: str
+    nonce: str
+    expires_at: datetime
+
+
+class PresenceEventIn(BaseModel):
+    """One piece of evidence captured on a device."""
+    event_id: UUID
+    session_id: UUID
+    matric_number: str = Field(..., max_length=20)
+    event_type: Literal['check_in', 'checkpoint', 'check_out', 'leave', 'venue_signal']
+    source: Literal['qr', 'gps', 'wifi', 'ble', 'client', 'manual']
+    checkpoint_id: Optional[UUID] = None
+    qr_payload: Optional[str] = None
+    qr_signature: Optional[str] = None
+    qr_nonce: Optional[str] = Field(default=None, max_length=64)
+    observed_at: datetime
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    accuracy_m: Optional[float] = Field(default=None, ge=0, le=10000)
+    ssid: Optional[str] = Field(default=None, max_length=100)
+    bssid: Optional[str] = Field(default=None, max_length=64)
+    beacon_id: Optional[str] = Field(default=None, max_length=64)
+    rssi: Optional[int] = Field(default=None, ge=-120, le=0)
+    client_uuid: Optional[str] = Field(default=None, max_length=64)
+    synced_from_client: bool = False
+
+
+class PresenceEventsBatch(BaseModel):
+    events: list[PresenceEventIn] = Field(..., min_length=1, max_length=100)
+    client_uuid: Optional[str] = Field(default=None, max_length=64)
+
+
+class ExemptionCreateRequest(BaseModel):
+    session_id: UUID
+    matric_number: str = Field(..., max_length=20)
+    reason: str = Field(..., min_length=3, max_length=300)
+    expires_in_hours: int = Field(default=24, ge=1, le=168)
+
+
+class ExemptionPreview(BaseModel):
+    session_id: UUID
+    course_code: str
+    status: str
+    expires_at: datetime
+
+
+class ExemptionClaimResponse(BaseModel):
+    status: str
+    session_id: UUID
+    matric_number: str
+    counts_as_present: bool
+    message: str
+
+
+class ReviewEntities(BaseModel):
+    """Structured extraction output from the review LLM."""
+    course_code: Optional[str] = Field(default=None, max_length=20)
+    session_id: Optional[str] = Field(default=None, max_length=64)
+    event_types: list[str] = Field(default_factory=list, max_length=20)
+    signals: list[str] = Field(default_factory=list, max_length=20)
+    issues: list[str] = Field(default_factory=list, max_length=20)
+    route_to: Literal['lecturer', 'admin', 'student'] = 'lecturer'
+
+
+class LLMReviewSuggestion(BaseModel):
+    """
+    Strict output contract for the LLM.
+
+    The model is never allowed to write attendance_outcomes directly. It can
+    only produce this validated object, which a lecturer must then approve or
+    override.
+    """
+    recommended_status: Literal['present', 'left_early', 'absent', 'exempted', 'pending_review']
+    confidence: float = Field(..., ge=0, le=1)
+    reason_summary: str = Field(..., min_length=10, max_length=500)
+    entities: ReviewEntities
+    draft_message: str = Field(..., min_length=10, max_length=1000)
+
+
+class ReviewGenerateRequest(BaseModel):
+    session_id: UUID
+    matric_number: str = Field(..., max_length=20)
+
+
+class ReviewDecisionRequest(BaseModel):
+    action: Literal['approve', 'override', 'reject']
+    final_status: Optional[Literal['present', 'left_early', 'absent', 'exempted', 'pending_review']] = None
+    note: str = Field(default='', max_length=500)

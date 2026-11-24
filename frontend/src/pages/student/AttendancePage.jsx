@@ -6,6 +6,7 @@ import FaceCamera from '../../components/FaceCamera'
 import LivenessGate from '../../components/LivenessGate'
 import { matchEmbedding, averageEmbeddings } from '../../lib/faceai/detector'
 import { queueAttendance, onSyncEvent, getPendingCount } from '../../lib/sync/syncQueue'
+import { queueQrPresenceEvent, getPresencePendingCount } from '../../lib/presence'
 import db from '../../lib/db/schema'
 import { API_BASE } from '../../lib/api'
 import {
@@ -22,7 +23,7 @@ const CAPTURE_FRAMES = 5
 const STEPS = ['Scan QR', 'Liveness', 'Matching', 'Done']
 
 export default function AttendancePage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [step, setStep] = useState(0)
 
   // Step 0 — QR scan
@@ -38,7 +39,6 @@ export default function AttendancePage() {
   const [rppgStatus,     setRppgStatus]     = useState(null)
 
   // Step 2 — Capture & match
-  const [embeddings,    setEmbeddings]   = useState([])  // captured this session
   const [matchResult,   setMatchResult]  = useState(null)
   const [matchError,    setMatchError]   = useState('')
   const [captureCount,  setCaptureCount] = useState(0)
@@ -92,7 +92,7 @@ export default function AttendancePage() {
     window.addEventListener('offline', handleOffline)
     // Sync events → update pending count
     const unsub = onSyncEvent(async () => {
-      setPendingCount(await getPendingCount())
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
     })
     return () => {
       window.removeEventListener('online',  handleOnline)
@@ -119,7 +119,7 @@ export default function AttendancePage() {
 
     scanner.render(
       (text) => handleQRSuccess(text, scanner),
-      (err) => { /* per-frame errors — ignore */ }
+      () => undefined
     )
     scannerRef.current = scanner
 
@@ -128,8 +128,9 @@ export default function AttendancePage() {
     }
   }, [step, manualEntry])
 
-  function handleQRSuccess(text, scanner) {
+  async function handleQRSuccess(text, scanner) {
     scanner?.clear().catch(() => {})
+
     try {
       const parsed = JSON.parse(text)
       const { payload, signature } = parsed
@@ -137,20 +138,32 @@ export default function AttendancePage() {
 
       const data = JSON.parse(payload)
       const { session_id, course_code, expires_at } = data
-
       if (!session_id || !course_code) throw new Error('Missing session fields in QR')
 
-      // Basic client-side expiry check
       if (expires_at && new Date(expires_at) < new Date()) {
-        setScanError('This session has expired. Ask your lecturer to start a new one.')
+        setScanError('This QR has expired. Ask your lecturer to generate a new one.')
+        return
+      }
+
+      await queueQrPresenceEvent({
+        payload,
+        signature,
+        matricNumber: user?.matric_number,
+        fallbackType: 'check_in',
+      })
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
+
+      if (data.event_type === 'checkpoint' || data.event_type === 'check_out') {
+        setScanError('')
+        setStep(3) // → Done; this is a presence check, not a new biometric mark
         return
       }
 
       setSessionData({ session_id, course_code, expires_at, qr_payload: payload, qr_signature: signature })
       setScanError('')
-      setStep(1)  // → Liveness
-    } catch (e) {
-      setScanError('Invalid QR code. Please scan the lecturer\'s session QR.')
+      setStep(1) // → Liveness
+    } catch {
+      setScanError('Invalid QR code. Please scan the lecturer\'s QR.')
     }
   }
 
@@ -197,8 +210,6 @@ export default function AttendancePage() {
             await new Promise(r => setTimeout(r, 300))
           }
         }
-        setEmbeddings(captured)
-
         // 2. Load course embeddings (Dexie first, then backend)
         const courseEmbeddings = await loadCourseEmbeddings(sessionData.course_code)
 
@@ -249,7 +260,7 @@ export default function AttendancePage() {
           setStep(5)  // → Behavioral Verification UI
         } else {
           await queueAttendance(payload)
-          setPendingCount(await getPendingCount())
+          setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
           setStep(3)  // → Done
         }
 
@@ -310,7 +321,7 @@ export default function AttendancePage() {
         method: 'face_disambiguated'
       })
 
-      setPendingCount(await getPendingCount())
+      setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
       setStep(3) // → Done
     } catch (err) {
       setMatchError(err.message)
@@ -370,7 +381,6 @@ export default function AttendancePage() {
     setMatchError('')
     setCaptureCount(0)
     setIsProcessing(false)
-    setEmbeddings([])
     setScanError('')
     setTempCheckinPayload(null)
     setTypedText('')
@@ -461,7 +471,7 @@ export default function AttendancePage() {
           <div className="card fade-in-up">
             <div style={{ marginBottom: '12px' }}>
               <div className="badge badge-brand" style={{ marginBottom: '6px' }}>{sessionData?.course_code}</div>
-              <h3 style={{ margin: 0 }}>👁 Liveness Check</h3>
+              <h3 style={{ margin: 0 }}>Liveness Check</h3>
               <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
                 Look at the camera and blink twice to prove you're present.
               </p>
@@ -478,7 +488,7 @@ export default function AttendancePage() {
             {livenessStatus?.failed && (
               <button className="btn btn-ghost btn-full" style={{ marginTop: '12px' }}
                 onClick={() => faceCamRef.current?.resetLiveness()}>
-                🔄 Retry Liveness
+                Retry Liveness
               </button>
             )}
           </div>
@@ -487,7 +497,7 @@ export default function AttendancePage() {
         {/* ── STEP 2: Capture & Match ── */}
         {step === 2 && (
           <div className="card fade-in-up">
-            <h3 style={{ margin: '0 0 8px' }}>🔍 Verifying Identity</h3>
+            <h3 style={{ margin: '0 0 8px' }}>Verifying Identity</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               Hold still while we capture and match your face.
             </p>
@@ -528,7 +538,7 @@ export default function AttendancePage() {
               display: 'grid', placeItems: 'center', fontSize: '32px',
               boxShadow: '0 0 30px rgba(16,185,129,0.3)',
             }}>
-              ✅
+              ✓
             </div>
 
             <h2 style={{ marginBottom: '6px' }}>Attendance Marked!</h2>
@@ -562,7 +572,7 @@ export default function AttendancePage() {
 
             {!isOnline && pendingCount > 0 && (
               <div className="alert alert-warning text-sm" style={{ marginBottom: '16px', textAlign: 'left' }}>
-                📶 You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
+                You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
               </div>
             )}
 
@@ -576,7 +586,7 @@ export default function AttendancePage() {
         {/* ── STEP 5: Behavioral Verification ── */}
         {step === 5 && matchResult && (
           <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '8px' }}>⚠️ Behavioral Verification Required</h3>
+            <h3 style={{ marginBottom: '8px' }}>Behavioral Verification Required</h3>
             <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
               We detected look-alike matches. Please trace a circle inside the target box and type your matriculation number below to verify your identity.
             </p>
@@ -606,7 +616,7 @@ export default function AttendancePage() {
                 }}
               >
                 <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
-                  Draw a circle or path here 🔄
+                  Draw a circle or path here
                 </span>
               </div>
             </div>

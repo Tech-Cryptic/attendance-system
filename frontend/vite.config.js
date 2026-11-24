@@ -16,7 +16,7 @@ export default defineConfig({
       manifest: {
         name: 'FaceAttend — Unilorin Biometric Attendance',
         short_name: 'FaceAttend',
-        description: 'Offline-first AI-powered facial recognition attendance system for the University of Ilorin.',
+        description: 'Facial attendance with offline presence evidence for the University of Ilorin.',
         theme_color: '#0a0a1a',
         background_color: '#0a0a1a',
         display: 'standalone',

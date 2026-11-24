@@ -22,7 +22,7 @@ export const toast = {
   warning: (msg, opts) => _addToast?.({ msg, type: 'warning', ...opts }),
 }
 
-const ICONS  = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' }
+const ICONS = { success: '✓', error: '!', info: 'i', warning: '!' }
 const COLORS = {
   success: { bg: 'var(--success-bg)', border: 'var(--success)', text: 'var(--success)' },
   error:   { bg: 'var(--danger-bg)',  border: 'var(--danger)',  text: 'var(--danger)'  },

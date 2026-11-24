@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 
 /**
  * NDPRConsent — Nigeria Data Protection Regulation 2019 Consent Modal
@@ -90,7 +90,7 @@ export default function NDPRConsent({ onAccept, onDecline }) {
           </p>
 
           <p style={{ marginTop: '16px', padding: '12px', background: 'rgba(245,158,11,0.08)', borderRadius: '8px', borderLeft: '3px solid var(--warning)', color: 'var(--warning)' }}>
-            ⚠️ Consent is voluntary. Withholding consent will not affect your academic standing. Alternative attendance verification remains available.
+            Consent is voluntary. Withholding consent will not affect your academic standing. Alternative attendance verification remains available.
           </p>
 
           <p style={{ marginTop: '16px', fontSize: '11px', color: 'var(--text-muted)' }}>

@@ -10,13 +10,14 @@ from app.routes import enroll
 from app.routes import attendance
 from app.routes import admin
 from app.routes import batch_attendance
+from app.routes import presence
 from app.auth import router as auth_router
 
 load_dotenv()
 
 app = FastAPI(
     title="FaceAttend API — Unilorin Biometric Attendance",
-    description="Offline-first AI facial recognition attendance system. NDPA 2023 compliant. Multi-face proximity-batch scanning.",
+    description="Biometric attendance API with offline presence evidence and human-reviewed exceptions.",
     version="2.0.0"
 )
 
@@ -35,6 +36,7 @@ app.include_router(auth_router.router)
 app.include_router(enroll.router)
 app.include_router(attendance.router)
 app.include_router(batch_attendance.router)
+app.include_router(presence.router)
 app.include_router(admin.router)
 app.include_router(admin.lecturer_router)
 

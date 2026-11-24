@@ -68,11 +68,11 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       const res = await fetch(`${API_BASE}/admin/users/check?${params}`, { headers: authHeaders(token) })
       if (!res.ok) return
       const { email_taken, matric_taken } = await res.json()
-      if (email_taken && matric_taken) setUserCheckMsg('⚠ This email and matric are already registered.')
-      else if (email_taken)            setUserCheckMsg('⚠ This email is already registered.')
-      else if (matric_taken)           setUserCheckMsg('⚠ This matric number is already linked to another account.')
+      if (email_taken && matric_taken) setUserCheckMsg('This email and matric are already registered.')
+      else if (email_taken)            setUserCheckMsg('This email is already registered.')
+      else if (matric_taken)           setUserCheckMsg('This matric number is already linked to another account.')
       else                             setUserCheckMsg('')
-    } catch {}
+    } catch { setUserCheckMsg('') }
   }
 
   // ── Open edit modal ─────────────────────────────────────────
@@ -197,7 +197,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       })
       const data = await res.json()
       if (!res.ok) { setCourseMsg(`Error: ${data.detail}`); return }
-      setCourseMsg(`✅ Course "${data.course_code}" created. Share the enrollment link below.`)
+      setCourseMsg(`Course "${data.course_code}" created. Share the enrollment link below.`)
       setNewCourseLink(data.enrollment_url)
       setCourses(prev => [...prev, data])
       setCourseForm({ course_code: '', course_title: '', expected_count: '', matric_list: '', lecturer_id: '' })
@@ -216,7 +216,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
       const data = await res.json()
       if (!res.ok) { setTokenMsg(`Error: ${data.detail}`); return }
       setNewToken(data.token)
-      setTokenMsg(`✅ Token issued for ${tokenForm.course_code}`)
+      setTokenMsg(`Token issued for ${tokenForm.course_code}`)
     } catch { setTokenMsg('Network error.') }
     finally  { setTokenCreating(false) }
   }
@@ -259,7 +259,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
         setUserMsg(`Error: ${data.detail}`)
         return
       }
-      setUserMsg(`✅ ${userForm.role.toUpperCase()} "${userForm.full_name}" registered successfully!`)
+      setUserMsg(`${userForm.role.toUpperCase()} "${userForm.full_name}" registered.`)
       setUserForm({ email: '', password: '', full_name: '', role: 'lecturer', linked_matric: '' })
       
       const [usrRes, lecRes] = await Promise.all([
@@ -369,11 +369,11 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
             <div className="card">
               <h4 style={{ marginBottom: '16px' }}>Quick Actions</h4>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                <button className="btn btn-ghost" onClick={() => setTab('courses')}>➕ Create Course</button>
-                <button className="btn btn-ghost" onClick={() => setTab('tokens')}>🔑 Issue Token</button>
+                <button className="btn btn-ghost" onClick={() => setTab('courses')}>Create Course</button>
+                <button className="btn btn-ghost" onClick={() => setTab('tokens')}>Issue Token</button>
                 <button className="btn btn-ghost" onClick={() => setTab('conflicts')}>🚩 View Conflicts</button>
                 <button className="btn btn-ghost" onClick={() => setTab('users')}>👤 Create Users</button>
-                <button className="btn btn-ghost" onClick={() => setTab('export')}>📥 Export Data</button>
+                <button className="btn btn-ghost" onClick={() => setTab('export')}>Export Data</button>
               </div>
             </div>
           )}
@@ -386,7 +386,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                 <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
                   Admin sets the course up. Students self-enroll via the generated link. System flags overflow if enrolled &gt; expected.
                 </p>
-                {courseMsg && <div className={`alert ${courseMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '12px' }}>{courseMsg}</div>}
+                {courseMsg && <div className={`alert ${courseMsg.startsWith('Error') || courseMsg.startsWith('Network') ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '12px' }}>{courseMsg}</div>}
 
                 {/* Enrollment link after creation */}
                 {newCourseLink && (
@@ -451,7 +451,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                     />
                   </div>
                   <button type="submit" className="btn btn-primary" disabled={courseCreating} style={{ alignSelf: 'flex-start' }}>
-                    {courseCreating ? 'Creating…' : '➕ Create Course & Generate Link'}
+                      {courseCreating ? 'Creating…' : 'Create Course & Generate Link'}
                   </button>
                 </form>
               </div>
@@ -459,7 +459,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
               {/* Over-enrollment flags */}
               {courses.some(c => c.over_enrollment_flagged) && (
                 <div className="alert alert-danger">
-                  ⚠️ <strong>Over-enrollment detected</strong> in {courses.filter(c => c.over_enrollment_flagged).map(c => c.course_code).join(', ')}.
+                  <strong>Over-enrollment detected</strong> in {courses.filter(c => c.over_enrollment_flagged).map(c => c.course_code).join(', ')}.
                   Enrolled count exceeds the expected class size. Review immediately.
                 </div>
               )}
@@ -549,12 +549,12 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
               <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
                 Tokens allow a specific student to enroll in a course. Each token is single-use.
               </p>
-              {tokenMsg && <div className={`alert ${tokenMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{tokenMsg}</div>}
+              {tokenMsg && <div className={`alert ${tokenMsg.startsWith('Error') || tokenMsg.startsWith('Network') ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>{tokenMsg}</div>}
               {newToken && (
                 <div style={{ marginBottom: '20px', padding: '16px', background: 'var(--success-bg)', borderRadius: '10px', border: '1px solid var(--success)' }}>
                   <div style={{ fontSize: '12px', color: 'var(--success)', marginBottom: '6px', fontWeight: 600 }}>Share this token with the student:</div>
                   <div className="font-mono" style={{ fontSize: '15px', wordBreak: 'break-all', color: 'var(--text-primary)', letterSpacing: '0.05em' }}>{newToken}</div>
-                  <button className="btn btn-ghost btn-sm" style={{ marginTop: '10px' }} onClick={() => navigator.clipboard.writeText(newToken)}>📋 Copy</button>
+                  <button className="btn btn-ghost btn-sm" style={{ marginTop: '10px' }} onClick={() => navigator.clipboard.writeText(newToken)}>Copy</button>
                 </div>
               )}
               <form onSubmit={handleCreateToken} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -583,7 +583,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                   </div>
                 </div>
                 <button type="submit" className="btn btn-primary" disabled={tokenCreating || courses.length===0} style={{ alignSelf: 'flex-start' }}>
-                  {tokenCreating ? 'Generating…' : '🔑 Generate Token'}
+                  {tokenCreating ? 'Generating…' : 'Generate Token'}
                 </button>
               </form>
             </div>
@@ -594,7 +594,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div style={{ padding:'16px 20px', borderBottom:'1px solid var(--border-subtle)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <h4 style={{ margin: 0 }}>Enrolled Students ({students.length})</h4>
-                <a href={`${API_BASE}/admin/export/students.csv`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">📥 Export CSV</a>
+                <a href={`${API_BASE}/admin/export/students.csv`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">Export CSV</a>
               </div>
               <table className="data-table">
                 <thead><tr><th>Matric No.</th><th>Full Name</th><th>Enrolled</th><th>Flag</th></tr></thead>
@@ -606,7 +606,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                           <td><span className="font-mono text-sm">{s.matric_number}</span></td>
                           <td>{s.full_name}</td>
                           <td className="text-sm text-muted">{new Date(s.enrolled_at).toLocaleDateString()}</td>
-                          <td>{s.high_similarity_flag ? <span className="badge badge-warning">⚠️ Twin Flag</span> : <span className="badge badge-success">✓ Clear</span>}</td>
+                          <td>{s.high_similarity_flag ? <span className="badge badge-warning">Twin Flag</span> : <span className="badge badge-success">✓ Clear</span>}</td>
                         </tr>
                       ))
                   }
@@ -618,12 +618,12 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
           {/* ── Conflicts ── */}
           {tab === 'conflicts' && (
             <div className="card">
-              <h4 style={{ marginBottom: '8px' }}>⚠️ High Similarity Flags ({conflicts.length})</h4>
+              <h4 style={{ marginBottom: '8px' }}>High Similarity Flags ({conflicts.length})</h4>
               <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
                 These students have facial embeddings within the twin-flag threshold (cosine distance &lt; 0.50). They will require additional behavioural verification at attendance time.
               </p>
               {conflicts.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'40px', color:'var(--text-muted)' }}>✅ No conflicts detected.</div>
+                <div style={{ textAlign:'center', padding:'40px', color:'var(--text-muted)' }}>No conflicts detected.</div>
               ) : (
                 <table className="data-table">
                   <thead><tr><th>Matric</th><th>Name</th><th>Flagged Pair</th><th>Enrolled</th></tr></thead>
@@ -650,7 +650,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
                 <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
                   Create login accounts for lecturers or students. Student accounts must link to a valid matric number.
                 </p>
-                {userMsg && <div className={`alert ${userMsg.startsWith('✅') ? 'alert-success' : 'alert-danger'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
+                {userMsg && <div className={`alert ${userMsg.startsWith('Error') || userMsg.startsWith('Network') ? 'alert-danger' : 'alert-success'}`} style={{ marginBottom: '16px' }}>{userMsg}</div>}
                 {userCheckMsg && (
                   <div className="alert alert-warning" style={{ marginBottom: '12px' }}>{userCheckMsg}</div>
                 )}
@@ -778,7 +778,7 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
               <div className="section-intro">
                 <h4>Export data</h4>
-                <p>Download attendance and student records as CSV. No raw biometric data is included — NDPR 2019 compliant.</p>
+                <p>Download attendance and student records as CSV. Raw biometric data is not included.</p>
               </div>
 
               <div className="card" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-4)' }}>
@@ -865,16 +865,6 @@ export default function AdminDashboard({ defaultTab = 'overview' }) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-// StatCard kept for potential future use, but not rendered in the main layout.
-function StatCard({ label, value, color }) {
-  return (
-    <div className="stat-card">
-      <div className="stat-value" style={{ color }}>{value ?? '—'}</div>
-      <div className="stat-label">{label}</div>
     </div>
   )
 }

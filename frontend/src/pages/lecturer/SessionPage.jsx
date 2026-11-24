@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
+import ExemptionPanel from '../../components/ExemptionPanel'
+import PresenceReviewPanel from '../../components/PresenceReviewPanel'
+import { toast } from '../../components/Toast'
 
 
 function authHeaders(token) {
@@ -24,9 +27,12 @@ export default function SessionPage() {
   const [session,        setSession]        = useState(null)   // active session data
   const [qrDataURL,      setQrDataURL]      = useState(null)
   const [attendance,     setAttendance]     = useState([])
+  const [outcomes,       setOutcomes]       = useState([])
   const [pollError,      setPollError]      = useState('')
   const [timeLeft,       setTimeLeft]       = useState(null)   // seconds remaining
   const [ending,         setEnding]         = useState(false)
+  const [checkpointQr,   setCheckpointQr]   = useState(null)
+  const [checkpointError,setCheckpointError]= useState('')
 
   const pollRef  = useRef(null)
   const timerRef = useRef(null)
@@ -37,7 +43,9 @@ export default function SessionPage() {
       try {
         const res = await fetch(`${API_BASE}/lecturer/courses`, { headers: authHeaders(token) })
         if (res.ok) setCourses(await res.json())
-      } catch {}
+      } catch {
+        setCourses([])
+      }
     }
     load()
   }, [token])
@@ -76,6 +84,38 @@ export default function SessionPage() {
     return () => clearInterval(pollRef.current)
   }, [session, token])
 
+  async function loadOutcomes() {
+    if (!session?.session_id) return
+    try {
+      const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
+        headers: authHeaders(token)
+      })
+      if (res.ok) setOutcomes(await res.json())
+    } catch {
+      setOutcomes([])
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.session_id || session.active) return undefined
+    let cancelled = false
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
+          headers: authHeaders(token)
+        })
+        const data = await res.json()
+        if (res.ok && !cancelled) setOutcomes(data)
+      } catch {
+        if (!cancelled) setOutcomes([])
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [session?.session_id, session?.active, token])
+
   // ── Create session ────────────────────────────────────────────
   async function handleCreateSession(e) {
     e.preventDefault()
@@ -108,17 +148,57 @@ export default function SessionPage() {
     }
   }
 
+  // ── Presence checkpoints ──────────────────────────────────────
+  async function generateCheckpoint(eventType) {
+    if (!session) return
+    setCheckpointError('')
+    try {
+      const res = await fetch(`${API_BASE}/presence/checkpoints`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          session_id: session.session_id,
+          event_type: eventType,
+          label: eventType === 'check_out' ? 'End of lecture' : 'Mid-lecture check',
+          expires_in_minutes: 10,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? 'Could not generate QR.')
+
+      const content = JSON.stringify({ payload: data.qr_payload, signature: data.qr_signature })
+      const url = await QRCode.toDataURL(content, {
+        width: 320, margin: 2,
+        color: { dark: '#0a0a1a', light: '#ffffff' },
+        errorCorrectionLevel: 'M',
+      })
+      setCheckpointQr({ url, eventType, label: data.label ?? eventType })
+      toast.success(`${eventType === 'check_out' ? 'Check-out' : 'Checkpoint'} QR ready.`)
+    } catch (err) {
+      setCheckpointError(err.message)
+    }
+  }
+
   // ── End session ───────────────────────────────────────────────
   async function handleEndSession() {
     if (!session) return
     setEnding(true)
     try {
-      await fetch(`${API_BASE}/sessions/${session.session_id}/end`, {
+      const res = await fetch(`${API_BASE}/sessions/${session.session_id}/end`, {
         method: 'POST', headers: authHeaders(token)
       })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail ?? 'Could not end session.')
+
       clearInterval(pollRef.current)
       clearInterval(timerRef.current)
       setSession(prev => ({ ...prev, active: false }))
+      toast.success(
+        `Session ended. Presence: ${data.presence_summary?.present ?? 0} present, ` +
+        `${data.presence_summary?.pending_review ?? 0} for review.`
+      )
+    } catch (err) {
+      toast.error(err.message)
     } finally {
       setEnding(false)
     }
@@ -238,7 +318,7 @@ export default function SessionPage() {
                 {/* Policy note */}
                 <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--accent-muted)', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
                   <p className="text-xs text-muted" style={{ margin: 0 }}>
-                    📋 <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
+                    <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
                   </p>
                 </div>
               </div>
@@ -268,7 +348,7 @@ export default function SessionPage() {
                     {session.course_code}
                   </div>
                   <h3 style={{ margin: 0 }}>
-                    {isExpired ? '⏰ Session Expired' : (session.active ? '🟢 Session Active' : '🔴 Session Ended')}
+                    {isExpired ? 'Session Expired' : (session.active ? 'Session Active' : 'Session Ended')}
                   </h3>
                   <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
                     {attendance.length} student{attendance.length !== 1 ? 's' : ''} marked attendance
@@ -320,12 +400,44 @@ export default function SessionPage() {
                     className="btn btn-ghost btn-sm"
                     id="btn-download-session-qr"
                   >
-                    📥 Download QR
+                    Download QR
                   </a>
                 )}
                 <span className="btn btn-ghost btn-sm font-mono" style={{ cursor: 'default', fontSize: '11px' }}>
                   {session.session_id.slice(0, 8)}…
                 </span>
+              </div>
+
+              {/* Continuity proof: scan a midpoint QR, then a check-out QR. */}
+              <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-default)', paddingTop: '16px' }}>
+                <p className="text-sm text-secondary" style={{ marginBottom: '10px' }}>
+                  Generate a short-lived QR when you want to confirm students are still in class.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => generateCheckpoint('checkpoint')}
+                    disabled={!session.active}
+                  >
+                    Midpoint check
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => generateCheckpoint('check_out')}
+                    disabled={!session.active}
+                  >
+                    End-of-class check-out
+                  </button>
+                </div>
+                {checkpointError && <p className="form-error">{checkpointError}</p>}
+                {checkpointQr && (
+                  <div style={{ marginTop: '14px' }}>
+                    <p className="text-sm text-muted">{checkpointQr.label} (valid 10 minutes)</p>
+                    <div className="qr-box" style={{ margin: '12px auto 0' }}>
+                      <img src={checkpointQr.url} alt={`${checkpointQr.eventType} QR code`} width={220} height={220} />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -363,7 +475,7 @@ export default function SessionPage() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
                 <h4 style={{ margin: 0 }}>
-                  ✅ Attendance ({attendance.length})
+                  Attendance ({attendance.length})
                 </h4>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
                   <div className="sync-dot online" />
@@ -375,12 +487,11 @@ export default function SessionPage() {
 
               {attendance.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: '14px' }}>
-                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>👁</div>
                   Waiting for students to mark attendance…
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {attendance.map((rec, i) => (
+                  {attendance.map((rec) => (
                     <div key={rec.matric_number} className="record-enter" style={{
                       display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
                       padding: 'var(--sp-2) var(--sp-4)',
@@ -421,6 +532,17 @@ export default function SessionPage() {
                 </div>
               )}
             </div>
+
+            {!session.active && (
+              <>
+                <PresenceReviewPanel
+                  session={session}
+                  outcomes={outcomes}
+                  onDecision={loadOutcomes}
+                />
+                <ExemptionPanel session={session} />
+              </>
+            )}
           </div>
         )}
       </div>

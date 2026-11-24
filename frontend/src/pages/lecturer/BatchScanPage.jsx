@@ -23,8 +23,7 @@ import { API_BASE } from '../../lib/api'
 
 
 // ── Constants ────────────────────────────────────────────────
-const SCAN_INTERVAL_MS = 800       // run inference every 800ms during live scan
-const CONFIRM_LOCK_MS  = 2000      // debounce before allowing re-confirm
+const SCAN_INTERVAL_MS = 800
 
 export default function BatchScanPage() {
   const { sessionId, courseCode } = useParams()
@@ -40,7 +39,6 @@ export default function BatchScanPage() {
   const [detectedFaces, setDetectedFaces] = useState([])    // live detected faces with match info
   const [confirmedMatches, setConfirmedMatches] = useState([]) // accumulated across all groups
   const [courseEmbeddings, setCourseEmbeddings] = useState([])
-  const [scanCount, setScanCount]   = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [sessionStatus, setSessionStatus] = useState(null)
   const [fallbackReleasing, setFallbackReleasing] = useState(false)
@@ -116,7 +114,6 @@ export default function BatchScanPage() {
 
         setDetectedFaces(matched)
         drawOverlay(matched)
-        setScanCount(c => c + 1)
       } catch (err) {
         console.error('[BatchScan] Scan error:', err)
       }
@@ -203,7 +200,7 @@ export default function BatchScanPage() {
     }
     setSubmitting(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const payload = {
         session_id: sessionId,
         records: confirmedMatches.map(m => ({
@@ -211,7 +208,7 @@ export default function BatchScanPage() {
           similarity_distance: m.similarity_distance,
           confidence_band:     m.confidence_band,
         })),
-        client_uuid: localStorage.getItem('clientUUID') || 'web',
+        client_uuid: localStorage.getItem('faceattend_client_uuid') || 'web',
       }
       const res = await fetch(`${API_BASE}/attendance/batch`, {
         method:  'POST',
@@ -240,20 +237,20 @@ export default function BatchScanPage() {
   // ── Refresh session status ────────────────────────────────
   async function refreshStatus() {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const res = await fetch(`${API_BASE}/attendance/session/${sessionId}/status`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const data = await res.json()
       setSessionStatus(data)
-    } catch {}
+    } catch { setSessionStatus(null) }
   }
 
   // ── Release fallback QR ───────────────────────────────────
   async function releaseFallback() {
     setFallbackReleasing(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('fa_token')
       const res = await fetch(`${API_BASE}/attendance/fallback-release`, {
         method:  'POST',
         headers: {
@@ -413,7 +410,7 @@ export default function BatchScanPage() {
 
           {fallbackDone && (
             <div style={styles.fallbackSuccess}>
-              ✅ Fallback QR is live. Unmatched students can use their dashboard to mark attendance.
+              Fallback QR is live. Unmatched students can use their dashboard to mark attendance.
               Window expires in 15 minutes.
             </div>
           )}

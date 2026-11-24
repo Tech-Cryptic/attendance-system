@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Railway gives postgres:// but psycopg2 requires postgresql://
+# psycopg2 requires postgresql:// rather than postgres://
 _raw_url = os.getenv("DATABASE_URL", "")
 DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url else None
 
@@ -19,8 +19,7 @@ def _get_pool():
     if _pool is None:
         if not DATABASE_URL:
             raise RuntimeError(
-                "DATABASE_URL environment variable is not set. "
-                "Add it in Railway → backend service → Variables."
+                "DATABASE_URL environment variable is not set."
             )
         _pool = psycopg2.pool.SimpleConnectionPool(1, 10, DATABASE_URL)
     return _pool

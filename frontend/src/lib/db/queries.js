@@ -137,7 +137,7 @@ export async function markQueueItemFailed(id, error) {
   return db.attendanceQueue.update(id, {
     status: 'failed',
     last_error: error,
-    retry_count: (await db.attendanceQueue.get(id))?.retry_count + 1 ?? 1
+    retry_count: ((await db.attendanceQueue.get(id))?.retry_count ?? 0) + 1
   })
 }
 

@@ -99,14 +99,14 @@ function LogoIcon() {
 }
 
 export default function Sidebar({ mobileOpen, onClose }) {
-  const { user, logout, isAdmin, isLecturer } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
 
   // Poll pending sync count every 5s
   useEffect(() => {
     const update = async () => {
-      try { setPendingCount(await getPendingCount()) } catch {}
+      try { setPendingCount(await getPendingCount()) } catch { setPendingCount(0) }
     }
     update()
     const id = setInterval(update, 5000)

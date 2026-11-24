@@ -15,6 +15,7 @@ const BatchScanPage     = lazy(() => import('./pages/lecturer/BatchScanPage'))
 const StudentDashboard  = lazy(() => import('./pages/student/StudentDashboard'))
 const EnrollPage        = lazy(() => import('./pages/student/EnrollPage'))
 const AttendancePage    = lazy(() => import('./pages/student/AttendancePage'))
+const ExemptionClaimPage = lazy(() => import('./pages/student/ExemptionClaimPage'))
 const NotFound          = lazy(() => import('./pages/NotFound'))
 
 // ── Page-level loading fallback ────────────────────────────────
@@ -161,6 +162,11 @@ export default function App() {
             <Route path="/student/attendance" element={
               <ProtectedRoute allowedRoles={['student']}>
                 <AttendancePage />
+              </ProtectedRoute>
+            } />
+            <Route path="/exemptions/:token" element={
+              <ProtectedRoute allowedRoles={['student']}>
+                <ExemptionClaimPage />
               </ProtectedRoute>
             } />
 

@@ -62,7 +62,6 @@ export default function UpdateBanner() {
       boxShadow: '0 2px 20px rgba(0,0,0,0.4)',
       animation: 'slideDown 0.4s ease',
     }}>
-      <span style={{ fontSize: '18px' }}>🔄</span>
       <span style={{ flex: 1, fontSize: '13px', color: '#fff', fontWeight: 500 }}>
         A new version of FaceAttend is available.
       </span>

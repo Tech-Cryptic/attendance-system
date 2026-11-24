@@ -22,9 +22,8 @@
 // Named landmark indices in human.js annotations
 // leftEye  = [p0, p1, p2, p3, p4, p5] (6 points around the eye contour)
 // rightEye = same structure, other side
-const EAR_BLINK_THRESHOLD = 0.22   // below this → eye closed
-const EAR_OPEN_THRESHOLD  = 0.28   // above this after close → blink complete
-const EAR_MIN_CLOSE_FRAMES = 2     // frames eye must be closed to count as blink
+const EAR_BLINK_THRESHOLD = 0.22
+const EAR_MIN_CLOSE_FRAMES = 2
 
 function dist2D(p1, p2) {
   return Math.hypot(p1[0] - p2[0], p1[1] - p2[1])
