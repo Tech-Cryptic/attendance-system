@@ -15,13 +15,13 @@ from .conftest import auth_header
 
 FAKE_COURSE_CODE = "TST999"
 
-# A dummy 1024-dim embedding (all 0.1) — won't match any real student
+# A dummy 1024-dim embedding (all 0.1): won't match any real student
 DUMMY_EMBEDDING = [0.1] * 1024
 
 
 class TestSessionCreate:
     def test_create_session_requires_lecturer(self, client, student_token):
-        """Students cannot create sessions → 403."""
+        """Students cannot create sessions: 403."""
         resp = client.post("/sessions",
             headers=auth_header(student_token),
             json={"course_code": FAKE_COURSE_CODE, "duration_minutes": 10}
@@ -29,7 +29,7 @@ class TestSessionCreate:
         assert resp.status_code == 403
 
     def test_create_session_nonexistent_course(self, client, lecturer_token):
-        """Session for non-existent course → 404."""
+        """Session for non-existent course: 404."""
         resp = client.post("/sessions",
             headers=auth_header(lecturer_token),
             json={"course_code": "NONEXIST", "duration_minutes": 10}
@@ -37,7 +37,7 @@ class TestSessionCreate:
         assert resp.status_code == 404
 
     def test_create_session_duration_constraints(self, client, lecturer_token):
-        """Duration must be between 10–480 min — below 10 → 422."""
+        """Duration must be between 10 to 480 min; below 10: 422."""
         resp = client.post("/sessions",
             headers=auth_header(lecturer_token),
             json={"course_code": FAKE_COURSE_CODE, "duration_minutes": 5}  # below minimum
@@ -45,7 +45,7 @@ class TestSessionCreate:
         assert resp.status_code == 422
 
     def test_create_session_valid(self, client, lecturer_token, admin_token):
-        """Create a valid session → 200, returns signed QR payload."""
+        """Create a valid session: 200, returns signed QR payload."""
         # Ensure course exists
         client.post("/admin/courses",
             headers=auth_header(admin_token),
@@ -56,7 +56,7 @@ class TestSessionCreate:
             json={"course_code": FAKE_COURSE_CODE, "duration_minutes": 10}
         )
         if resp.status_code == 404:
-            pytest.skip("Test course not found — DB may not have lecturer assigned")
+            pytest.skip("Test course not found: DB may not have lecturer assigned")
         assert resp.status_code == 200
         data = resp.json()
         assert "session_id" in data
@@ -68,20 +68,20 @@ class TestSessionCreate:
 
 class TestSessionGet:
     def test_get_session_not_found(self, client, admin_token):
-        """Non-existent session → 404."""
+        """Non-existent session: 404."""
         resp = client.get("/sessions/00000000-0000-0000-0000-000000000000",
                           headers=auth_header(admin_token))
         assert resp.status_code == 404
 
     def test_get_session_requires_auth(self, client):
-        """No auth → 401/403."""
+        """No auth: 401/403."""
         resp = client.get("/sessions/00000000-0000-0000-0000-000000000000")
         assert resp.status_code in (401, 403)
 
 
 class TestAttendanceMark:
     def test_mark_invalid_qr_signature(self, client):
-        """Tampered QR → 403."""
+        """Tampered QR: 403."""
         resp = client.post("/attendance/mark", json={
             "session_id": "00000000-0000-0000-0000-000000000000",
             "qr_payload": "tampered_payload",
@@ -92,7 +92,7 @@ class TestAttendanceMark:
         assert resp.status_code == 403
 
     def test_mark_missing_embedding(self, client):
-        """Missing embedding → 422 validation error."""
+        """Missing embedding: 422 validation error."""
         resp = client.post("/attendance/mark", json={
             "session_id": "00000000-0000-0000-0000-000000000000",
             "qr_payload": "p",
@@ -102,19 +102,19 @@ class TestAttendanceMark:
         assert resp.status_code == 422
 
     def test_mark_wrong_embedding_length(self, client):
-        """Embedding with wrong dimension → 422."""
+        """Embedding with wrong dimension: 422."""
         resp = client.post("/attendance/mark", json={
             "session_id": "some-id",
             "qr_payload": "p",
             "qr_signature": "s",
-            "embedding": [0.1] * 512,  # wrong — must be 1024
+            "embedding": [0.1] * 512,  # wrong: must be 1024
         })
         assert resp.status_code == 422
 
 
 class TestStudentAttendance:
     def test_student_history_requires_auth(self, client):
-        """/student/attendance without auth → 401/403."""
+        """/student/attendance without auth: 401/403."""
         resp = client.get("/student/attendance")
         assert resp.status_code in (401, 403)
 
@@ -135,7 +135,7 @@ class TestStudentAttendance:
             assert "similarity_distance" in keys
 
     def test_lecturer_cannot_view_student_history(self, client, lecturer_token):
-        """Lecturer is not allowed on student-only endpoint → 403."""
+        """Lecturer is not allowed on student-only endpoint: 403."""
         resp = client.get("/student/attendance", headers=auth_header(lecturer_token))
         assert resp.status_code == 403
 
@@ -154,14 +154,14 @@ class TestLecturerEndpoints:
         assert isinstance(resp.json(), list)
 
     def test_student_cannot_view_lecturer_sessions(self, client, student_token):
-        """Student → 403 on lecturer endpoint."""
+        """Student: 403 on lecturer endpoint."""
         resp = client.get("/lecturer/sessions", headers=auth_header(student_token))
         assert resp.status_code == 403
 
 
 class TestCourseEmbeddings:
     def test_embeddings_requires_auth(self, client):
-        """/courses/{code}/embeddings without auth → 401/403."""
+        """/courses/{code}/embeddings without auth: 401/403."""
         resp = client.get(f"/courses/{FAKE_COURSE_CODE}/embeddings")
         assert resp.status_code in (401, 403)
 
@@ -180,7 +180,7 @@ class TestCourseEmbeddings:
 
 class TestSyncBatch:
     def test_sync_empty_batch(self, client):
-        """Empty records list → accepted, returns 0 synced."""
+        """Empty records list: accepted, returns 0 synced."""
         resp = client.post("/attendance/sync", json={
             "records": [],
             "client_uuid": "test-client-001"
@@ -191,7 +191,7 @@ class TestSyncBatch:
         assert data["failed"] == 0
 
     def test_sync_invalid_records(self, client):
-        """Records with tampered QR → all fail gracefully."""
+        """Records with tampered QR: all fail gracefully."""
         resp = client.post("/attendance/sync", json={
             "client_uuid": "test-client-001",
             "records": [{

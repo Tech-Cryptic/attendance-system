@@ -1,19 +1,23 @@
-/**
- * Toast Notification System
- *
- * Usage:
- *   import { toast, ToastContainer } from './Toast'
- *   toast.success('Attendance marked!')
- *   toast.error('Face not recognised')
- *   toast.info('Syncing 3 records…')
- *   toast.warning('You are offline')
- *
- * Mount <ToastContainer /> once at the app root.
- */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 
-let _addToast = null   // injected by ToastContainer
+let _addToast = null
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  )
+}
+
+const TONES = {
+  success: { label: 'Success', className: 'badge badge-success' },
+  error: { label: 'Error', className: 'badge badge-danger' },
+  info: { label: 'Info', className: 'badge badge-info' },
+  warning: { label: 'Warning', className: 'badge badge-warning' },
+}
 
 export const toast = {
   success: (msg, opts) => _addToast?.({ msg, type: 'success', ...opts }),
@@ -21,8 +25,6 @@ export const toast = {
   info:    (msg, opts) => _addToast?.({ msg, type: 'info',    ...opts }),
   warning: (msg, opts) => _addToast?.({ msg, type: 'warning', ...opts }),
 }
-
-const ICONS = { success: '✓', error: '!', info: 'i', warning: '!' }
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState([])
@@ -47,20 +49,23 @@ export function ToastContainer() {
 
   return createPortal(
     <div className="toast-container" role="status" aria-live="polite">
-      {toasts.map(t => (
-        <div key={t.id} className={`toast toast-${t.type}`}>
-          <span style={{ flexShrink: 0, fontWeight: 700 }}>{ICONS[t.type]}</span>
-          <span style={{ color: 'var(--text-primary)', flex: 1 }}>{t.msg}</span>
-          <button
-            type="button"
-            className="modal-close-btn"
-            aria-label="Dismiss notification"
-            onClick={() => removeToast(t.id)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
+      {toasts.map(t => {
+        const tone = TONES[t.type] ?? TONES.info
+        return (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            <span className={tone.className}>{tone.label}</span>
+            <span className="toast-message">{t.msg}</span>
+            <button
+              type="button"
+              className="modal-close-btn"
+              aria-label="Dismiss notification"
+              onClick={() => removeToast(t.id)}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+        )
+      })}
     </div>,
     document.body
   )

@@ -9,7 +9,7 @@ from app.auth.jwt import create_token, require_roles
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-# ── Request / Response Models ──────────────────────────────────
+# -- Request / Response Models ----------------------------------
 
 class LoginRequest(BaseModel):
     email: str
@@ -29,7 +29,7 @@ class TokenResponse(BaseModel):
     full_name: str
 
 
-# ── Helpers ────────────────────────────────────────────────────
+# -- Helpers ----------------------------------------------------
 
 def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
@@ -38,7 +38,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-# ── Routes ────────────────────────────────────────────────────
+# -- Routes ----------------------------------------------------
 
 @router.post("/login", response_model=TokenResponse)
 def login(req: LoginRequest):

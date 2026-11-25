@@ -62,9 +62,9 @@ export default function InstallBanner() {
         <span>Add to your home screen for offline access</span>
       </div>
       <div className="pwa-banner-actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={handleDismiss}>Not now</button>
+        <button type="button" className="btn btn-ghost btn-sm" aria-label="Dismiss install prompt" onClick={handleDismiss}>Not now</button>
         <button id="btn-pwa-install" type="button" className="btn btn-primary btn-sm" onClick={handleInstall} disabled={installing}>
-          {installing ? 'Installing…' : 'Install'}
+          {installing ? 'Installing...' : 'Install'}
         </button>
       </div>
     </div>

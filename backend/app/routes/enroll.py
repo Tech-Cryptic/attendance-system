@@ -10,7 +10,7 @@ from app.qr.signing import sign_qr_payload
 
 router = APIRouter()
 
-# ── Similarity threshold for twin-flagging at enrollment time ──
+# -- Similarity threshold for twin-flagging at enrollment time --
 # Calibrated against Section 3.5.2 / 3.6.3 (Euclidean in 1024-dim space)
 SIMILARITY_FLAG_THRESHOLD = 0.50
 
@@ -52,7 +52,7 @@ def check_token(req: TokenCheckRequest):
         release_connection(conn)
 
 
-# ── Enrollment ────────────────────────────────────────────────
+# -- Enrollment ------------------------------------------------
 
 @router.post("/enroll", response_model=EnrollmentResponse)
 def enroll_student(req: EnrollmentRequest):
@@ -109,7 +109,7 @@ def enroll_student(req: EnrollmentRequest):
             (
                 req.matric_number, req.full_name,
                 req.embedding,
-                req.iris_embedding,   # None if not provided — column is nullable
+                req.iris_embedding,   # None if not provided: column is nullable
                 enrolled_at, enrolled_at,
                 req.consent_version,
                 high_similarity_flag, flagged_with

@@ -16,7 +16,7 @@ from app.auth import router as auth_router
 load_dotenv()
 
 app = FastAPI(
-    title="FaceAttend API — Unilorin Biometric Attendance",
+    title="FaceAttend API: Unilorin Biometric Attendance",
     description="Biometric attendance API with offline presence evidence and human-reviewed exceptions.",
     version="2.0.0"
 )
@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Routers ────────────────────────────────────────────────────
+# -- Routers ----------------------------------------------------
 app.include_router(auth_router.router)
 app.include_router(enroll.router)
 app.include_router(attendance.router)
@@ -50,7 +50,7 @@ def health_check():
         return {"status": "error", "detail": str(e)}
 
 
-# ── Serve React build (production only) ───────────────────────
+# -- Serve React build (production only) -----------------------
 # When deployed on Render, the build step places the compiled
 # frontend in /frontend/dist relative to the repo root.
 # FastAPI serves those files as static assets and falls back to
@@ -59,10 +59,10 @@ def health_check():
 _DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 if _DIST.exists():
-    # Static assets (JS, CSS, icons, model weights …)
+    # Static assets (JS, CSS, icons, model weights, etc.)
     app.mount("/assets", StaticFiles(directory=str(_DIST / "assets")), name="assets")
 
-    # Every non-API, non-asset path → index.html (SPA fallback)
+    # Every non-API, non-asset path returns index.html (SPA fallback)
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str, request: Request):
         index = _DIST / "index.html"
@@ -72,8 +72,8 @@ else:
     @app.get("/")
     def root():
         return {
-            "system":      "FaceAttend — Offline-First Biometric Attendance",
+            "system":      "FaceAttend: Offline-First Biometric Attendance",
             "institution": "University of Ilorin",
-            "status":      "running (dev mode — no frontend build)",
+            "status":      "running in dev mode, no frontend build",
             "version":     "2.0.0",
         }

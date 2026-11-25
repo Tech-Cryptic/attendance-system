@@ -2,7 +2,6 @@ import { useRef, useEffect, useState, useCallback, useImperativeHandle, forwardR
 import { initHuman, detectAndEmbed, isHumanReady } from '../lib/faceai/detector'
 import { LivenessMonitor, rPPGSampler } from '../lib/faceai/liveness'
 
-/** Camera component for face detection, embeddings, and liveness checks. */
 const FaceCamera = forwardRef(function FaceCamera({
   onDetect,
   onLivenessChange,
@@ -13,16 +12,16 @@ const FaceCamera = forwardRef(function FaceCamera({
   className = '',
 }, ref) {
   const videoRef  = useRef(null)
-  const canvasRef = useRef(null)  // face mesh overlay canvas
-  const rafRef    = useRef(null)  // requestAnimationFrame handle
-  const streamRef = useRef(null)  // MediaStream
+  const canvasRef = useRef(null)
+  const rafRef    = useRef(null)
+  const streamRef = useRef(null)
 
   const livenessMonitorRef = useRef(null)
   const rppgSamplerRef     = useRef(null)
 
-  const [modelState, setModelState] = useState('idle')  // idle|loading|ready|error
+  const [modelState, setModelState] = useState('idle')
   const [loadProgress, setLoadProgress] = useState(0)
-  const [cameraState, setCameraState] = useState('off') // off|starting|live|error
+  const [cameraState, setCameraState] = useState('off')
   const [lastResult, setLastResult] = useState(null)
   const [livenessStatus, setLivenessStatus] = useState(null)
 
@@ -46,7 +45,6 @@ const FaceCamera = forwardRef(function FaceCamera({
     stopCamera,
   }), [lastResult, stopCamera])
 
-  // ── Model initialisation ──────────────────────────────────────
   useEffect(() => {
     if (isHumanReady()) {
       setModelState('ready')
@@ -64,7 +62,6 @@ const FaceCamera = forwardRef(function FaceCamera({
       })
   }, [])
 
-  // ── Liveness monitors ─────────────────────────────────────────
   useEffect(() => {
     livenessMonitorRef.current = new LivenessMonitor({ requiredBlinks, timeoutMs: 20000 })
     rppgSamplerRef.current     = new rPPGSampler({ fps: 30, windowSeconds: 6 })
@@ -74,7 +71,6 @@ const FaceCamera = forwardRef(function FaceCamera({
     }
   }, [requiredBlinks])
 
-  // ── Camera startup ────────────────────────────────────────────
   const startCamera = useCallback(async () => {
     if (!videoRef.current) return
     setCameraState('starting')
@@ -83,7 +79,7 @@ const FaceCamera = forwardRef(function FaceCamera({
         video: {
           width: { ideal: width },
           height: { ideal: height },
-          facingMode: 'user',           // front-facing camera
+          facingMode: 'user',
           frameRate: { ideal: 30 },
         },
         audio: false,
@@ -103,7 +99,6 @@ const FaceCamera = forwardRef(function FaceCamera({
     return () => stopCamera()
   }, [modelState, startCamera, stopCamera])
 
-  // ── Inference loop ────────────────────────────────────────────
   useEffect(() => {
     if (cameraState !== 'live' || modelState !== 'ready') return
     if (!videoRef.current || !canvasRef.current) return
@@ -117,7 +112,6 @@ const FaceCamera = forwardRef(function FaceCamera({
     async function loop() {
       if (!videoRef.current || !canvasRef.current) return
 
-      // Sync canvas resolution to actual video
       if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
         canvas.width  = video.videoWidth  || width
         canvas.height = video.videoHeight || height
@@ -130,24 +124,19 @@ const FaceCamera = forwardRef(function FaceCamera({
         result = await detectAndEmbed(video)
       } catch { /* expected during model loading */ }
 
-      // Clear overlay
       ctx.clearRect(0, 0, canvas.width, canvas.height)
 
       if (result) {
-        // ── Draw mesh overlay ────────────────────────────────
         drawFaceMeshOverlay(ctx, result, canvas.width)
 
-        // ── EAR Blink ────────────────────────────────────────
         const livenessStatus = livenessMonitorRef.current?.update(result.annotations)
         if (livenessStatus) {
           setLivenessStatus(livenessStatus)
           if (onLivenessChange) onLivenessChange(livenessStatus)
         }
 
-        // ── rPPG (sample every frame, analyse every 30 frames) ─
         rppgSamplerRef.current?.sample(canvas, result)
 
-        // ── Emit result to parent ─────────────────────────────
         const rppg = frameCount % 30 === 0
           ? rppgSamplerRef.current?.analyse()
           : null
@@ -160,7 +149,6 @@ const FaceCamera = forwardRef(function FaceCamera({
         setLastResult(enrichedResult)
         if (onDetect) onDetect(enrichedResult)
       } else {
-        // No face — reset blink state partially
         livenessMonitorRef.current?.update(null)
       }
 
@@ -173,94 +161,67 @@ const FaceCamera = forwardRef(function FaceCamera({
     }
   }, [cameraState, modelState, onDetect, onLivenessChange])
 
-  // ── Status bar content ────────────────────────────────────────
   const statusText = (() => {
     if (modelState === 'loading') {
-      return `Loading face model… ${Math.round(loadProgress * 100)}%`
+      return `Loading face model... ${Math.round(loadProgress * 100)}%`
     }
     if (modelState === 'error')  return 'Model failed to load'
     if (cameraState === 'error') return 'Camera access denied'
-    if (cameraState === 'starting') return 'Starting camera…'
+    if (cameraState === 'starting') return 'Starting camera...'
     if (!lastResult)             return 'Position your face in frame'
     if (livenessStatus?.passed)  return 'Liveness confirmed'
-    if (livenessStatus?.failed)  return 'Liveness timeout — please retry'
+    if (livenessStatus?.failed)  return 'Liveness timed out. Please retry'
     const blinks = livenessStatus?.blinkCount ?? 0
     const req    = livenessStatus?.required   ?? requiredBlinks
     return `Please blink naturally (${blinks}/${req} detected)`
   })()
 
   const confidenceText = lastResult?.faceScore
-    ? `Face: ${Math.round(lastResult.faceScore * 100)}%`
+    ? `Face match: ${Math.round(lastResult.faceScore * 100)}%`
     : ''
 
   const antispoofText = lastResult?.antispoofScore != null
-    ? `Real: ${Math.round(lastResult.antispoofScore * 100)}%`
+    ? `Liveness score: ${Math.round(lastResult.antispoofScore * 100)}%`
     : ''
 
   return (
-    <div className={`face-camera-container ${className}`} style={{ position: 'relative', overflow: 'hidden', borderRadius: 'var(--radius-lg)' }}>
-      {/* Video feed */}
+    <div className={`face-camera-container ${className}`}>
+      <span className="sr-only" aria-live="polite">{statusText}</span>
       <video
         ref={videoRef}
         className="face-camera-video"
         playsInline
         muted
         autoPlay
-        style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+        style={{ transform: 'scaleX(-1)' }}
       />
-
-      {/* Mesh overlay canvas */}
       <canvas
         ref={canvasRef}
         className="face-camera-canvas"
-        style={{
-          position: 'absolute', inset: 0,
-          width: '100%', height: '100%',
-          pointerEvents: 'none',
-          transform: 'scaleX(-1)',
-        }}
+        style={{ transform: 'scaleX(-1)' }}
       />
-
-      {/* Scanning corner brackets */}
       <ScanBrackets active={cameraState === 'live' && modelState === 'ready'} />
-
-      {/* Model loading overlay */}
       {modelState === 'loading' && (
-        <div style={{
-          position: 'absolute', inset: 0, background: 'rgba(24,30,27,0.92)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: '14px',
-        }}>
-          <div className="spinner spinner-lg" />
-          <p style={{ color: '#ffffff', fontSize: '14px', fontWeight: 600 }}>
-            Loading face model… {Math.round(loadProgress * 100)}%
-          </p>
-          <div className="progress-track" style={{ width: '200px', background: 'rgba(255,255,255,0.25)' }}>
-            <div className="progress-fill" style={{ width: `${loadProgress * 100}%`, background: '#ffffff' }} />
+        <div className="camera-stage-overlay stack">
+          <div className="camera-spinner" />
+          <p className="font-semibold">Loading face model... {Math.round(loadProgress * 100)}%</p>
+          <div className="w-full">
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${loadProgress * 100}%` }} />
+            </div>
           </div>
-          <p style={{ color: '#c8d1cb', fontSize: '12px' }}>First load may take about 15 seconds. Cached offline after.</p>
+          <p className="text-xs">First load may take about 15 seconds. Cached offline after.</p>
         </div>
       )}
-
-      {/* Status bar */}
       <div className="camera-status-bar">
-        <span style={{ color: '#ffffff', fontSize: '13px' }}>{statusText}</span>
-        <div style={{ display: 'flex', gap: '8px', fontSize: '12px', color: '#c8d1cb' }}>
+        <span>{statusText}</span>
+        <div className="inline-meta">
           {confidenceText && <span>{confidenceText}</span>}
           {antispoofText  && <span>{antispoofText}</span>}
         </div>
       </div>
-
-      {/* Liveness blink indicator (top-right) */}
       {livenessStatus && !livenessStatus.passed && (
-        <div style={{
-          position: 'absolute', top: '12px', right: '12px',
-          background: 'rgba(16,22,20,0.92)', borderRadius: 'var(--radius-full)',
-          padding: '4px 12px', fontSize: '12px', fontWeight: 600,
-          color: livenessStatus.passed ? '#b7e2c8' : '#e8d4ad',
-          border: '1px solid rgba(255,255,255,0.18)',
-          display: 'flex', alignItems: 'center', gap: '6px',
-        }}>
+        <div className="chip chip-warning camera-chip">
           <span>{livenessStatus.blinkCount}/{livenessStatus.required} blinks</span>
         </div>
       )}
@@ -268,26 +229,19 @@ const FaceCamera = forwardRef(function FaceCamera({
   )
 })
 
-// ── Canvas drawing — FaceMesh overlay ─────────────────────────
-
-/**
- * Draw the 478-point face mesh and coloured bounding box on canvas.
- * Uses raw landmark coordinates from human.js result.
- */
 function drawFaceMeshOverlay(ctx, result, canvasW) {
   if (!result?.mesh || !result?.box) return
 
   const [bx, by, bw, bh] = result.box
 
-  // Bounding box
   const antispoofScore = result.antispoofScore ?? 0.5
   const livenessScore  = result.livenessScore  ?? 0.5
   const passiveScore   = (antispoofScore + livenessScore) / 2
   const boxColor = passiveScore > 0.6
-    ? 'rgba(16, 185, 129, 0.8)'   // green — likely real
+    ? 'rgba(16, 185, 129, 0.8)'
     : passiveScore > 0.35
-    ? 'rgba(245, 158, 11, 0.8)'   // amber — uncertain
-    : 'rgba(239, 68, 68, 0.8)'    // red — likely spoof
+    ? 'rgba(245, 158, 11, 0.8)'
+    : 'rgba(239, 68, 68, 0.8)'
 
   ctx.strokeStyle = boxColor
   ctx.lineWidth = 2
@@ -312,7 +266,6 @@ function drawFaceMeshOverlay(ctx, result, canvasW) {
     ctx.beginPath()
     for (let i = 0; i < group.length; i++) {
       const [x, y] = group[i]
-      // Mirror x coordinate (canvas is scaleX(-1) mirrored)
       const mx = canvasW - x
       if (i === 0) ctx.moveTo(mx, y)
       else ctx.lineTo(mx, y)
@@ -331,8 +284,6 @@ function drawFaceMeshOverlay(ctx, result, canvasW) {
     }
   }
 }
-
-// ── Scanning Corner Brackets SVG ──────────────────────────────
 
 function ScanBrackets({ active }) {
   const color = active ? 'rgba(255, 255, 255, 0.85)' : 'rgba(255,255,255,0.18)'

@@ -1,5 +1,14 @@
 import { useState, useEffect } from 'react'
 
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  )
+}
+
 export default function UpdateBanner() {
   const [visible, setVisible] = useState(false)
   const [updating, setUpdating] = useState(false)
@@ -46,10 +55,10 @@ export default function UpdateBanner() {
       <span>A new version of FaceAttend is available.</span>
       <div className="pwa-banner-actions">
         <button id="btn-sw-update" type="button" className="btn btn-primary btn-sm" onClick={handleUpdate} disabled={updating}>
-          {updating ? 'Updating…' : 'Refresh now'}
+          {updating ? 'Updating...' : 'Refresh now'}
         </button>
         <button type="button" className="modal-close-btn" aria-label="Dismiss update notice" onClick={() => setVisible(false)}>
-          ×
+          <CloseIcon />
         </button>
       </div>
     </div>

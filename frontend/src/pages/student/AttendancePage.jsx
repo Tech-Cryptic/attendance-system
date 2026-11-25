@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, Fragment } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Html5QrcodeScanner, Html5QrcodeScanType } from 'html5-qrcode'
@@ -19,39 +19,39 @@ import {
 
 const CAPTURE_FRAMES = 5
 
-// ── Steps ──────────────────────────────────────────────────────
-const STEPS = ['Scan QR', 'Liveness', 'Matching', 'Done']
+const STEPS = [
+  { value: 0, label: 'Scan QR' },
+  { value: 1, label: 'Liveness' },
+  { value: 2, label: 'Matching' },
+  { value: 5, label: 'Verification' },
+  { value: 3, label: 'Done' },
+]
 
 export default function AttendancePage() {
   const { token, user } = useAuth()
   const [step, setStep] = useState(0)
 
-  // Step 0 — QR scan
   const [scanError,   setScanError]   = useState('')
-  const [sessionData, setSessionData] = useState(null)   // { session_id, course_code, expires_at, qr_payload, qr_signature }
+  const [sessionData, setSessionData] = useState(null)
   const [manualEntry, setManualEntry] = useState(false)
   const [manualCode,  setManualCode]  = useState('')
   const qrDivRef = useRef(null)
   const scannerRef = useRef(null)
 
-  // Step 1 — Liveness
   const [livenessStatus, setLivenessStatus] = useState(null)
   const [rppgStatus,     setRppgStatus]     = useState(null)
 
-  // Step 2 — Capture & match
   const [matchResult,   setMatchResult]  = useState(null)
   const [matchError,    setMatchError]   = useState('')
   const [captureCount,  setCaptureCount] = useState(0)
   const [isProcessing,  setIsProcessing] = useState(false)
 
-  // Step 3 — Result
   const [pendingCount,  setPendingCount] = useState(0)
   const [isOnline,      setIsOnline]     = useState(navigator.onLine)
 
   const faceCamRef       = useRef(null)
   const lastDetectionRef = useRef(null)
 
-  // Step 5 — Behavioral verification states & refs
   const [tempCheckinPayload, setTempCheckinPayload] = useState(null)
   const [typedText, setTypedText] = useState('')
   const traceCanvasRef = useRef(null)
@@ -84,13 +84,11 @@ export default function AttendancePage() {
     }
   }, [step])
 
-  // ── Network status ─────────────────────────────────────────
   useEffect(() => {
     const handleOnline  = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
     window.addEventListener('online',  handleOnline)
     window.addEventListener('offline', handleOffline)
-    // Sync events → update pending count
     const unsub = onSyncEvent(async () => {
       setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
     })
@@ -101,7 +99,6 @@ export default function AttendancePage() {
     }
   }, [])
 
-  // ── QR Scanner ────────────────────────────────────────────
   useEffect(() => {
     if (step !== 0 || manualEntry) return
     if (!qrDivRef.current) return
@@ -114,7 +111,7 @@ export default function AttendancePage() {
         rememberLastUsedCamera: true,
         supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
       },
-      false  // verbose = false
+      false
     )
 
     scanner.render(
@@ -155,13 +152,14 @@ export default function AttendancePage() {
 
       if (data.event_type === 'checkpoint' || data.event_type === 'check_out') {
         setScanError('')
-        setStep(3) // → Done; this is a presence check, not a new biometric mark
+        setSessionData({ session_id, course_code, expires_at, qr_payload: payload, qr_signature: signature, event_type: data.event_type })
+        setStep(3)
         return
       }
 
       setSessionData({ session_id, course_code, expires_at, qr_payload: payload, qr_signature: signature })
       setScanError('')
-      setStep(1) // → Liveness
+      setStep(1)
     } catch {
       setScanError('Invalid QR code. Please scan the lecturer\'s QR.')
     }
@@ -169,7 +167,6 @@ export default function AttendancePage() {
 
   function handleManualSubmit(e) {
     e.preventDefault()
-    // Accept a session_id directly for fallback mode
     if (manualCode.trim().length < 8) {
       setScanError('Please enter a valid session code.')
       return
@@ -177,18 +174,16 @@ export default function AttendancePage() {
     setScanError('Manual session codes require the backend to be reachable. Scanning QR is preferred.')
   }
 
-  // ── Liveness → auto-advance ────────────────────────────────
   const handleDetect = useCallback((result) => {
     lastDetectionRef.current = result
     if (result.livenessStatus) setLivenessStatus(result.livenessStatus)
     if (result.rppgStatus)     setRppgStatus(result.rppgStatus)
 
     if (result.livenessStatus?.passed && step === 1) {
-      setStep(2)  // → Capture & match
+      setStep(2)
     }
   }, [step])
 
-  // ── Capture & match ───────────────────────────────────────
   useEffect(() => {
     if (step !== 2 || isProcessing) return
 
@@ -197,7 +192,6 @@ export default function AttendancePage() {
       setMatchError('')
 
       try {
-        // 1. Collect N embedding frames
         const captured = []
         for (let i = 0; i < CAPTURE_FRAMES; i++) {
           await new Promise(r => setTimeout(r, 800))
@@ -210,7 +204,6 @@ export default function AttendancePage() {
             await new Promise(r => setTimeout(r, 300))
           }
         }
-        // 2. Load course embeddings (Dexie first, then backend)
         const courseEmbeddings = await loadCourseEmbeddings(sessionData.course_code)
 
         if (!courseEmbeddings || courseEmbeddings.length === 0) {
@@ -219,10 +212,8 @@ export default function AttendancePage() {
           return
         }
 
-        // 3. Average frames → stable probe embedding
         const probeEmbedding = averageEmbeddings(captured)
 
-        // 4. Course-scoped nearest-neighbour match
         const { match, similarity, distance, band } = matchEmbedding(probeEmbedding, courseEmbeddings)
 
         if (!match || band === 'reject') {
@@ -237,7 +228,6 @@ export default function AttendancePage() {
           return
         }
 
-        // 5. Queue attendance record (offline-first)
         const livenessEAR  = livenessStatus?.ear    ?? null
         const rppgScore    = rppgStatus?.score       ?? null
         const irisDistance = lastDetectionRef.current?.irisDescriptor ? 0 : null
@@ -257,11 +247,11 @@ export default function AttendancePage() {
 
         if (match.high_similarity_flag) {
           setTempCheckinPayload(payload)
-          setStep(5)  // → Behavioral Verification UI
+          setStep(5)
         } else {
           await queueAttendance(payload)
           setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
-          setStep(3)  // → Done
+          setStep(3)
         }
 
       } catch (err) {
@@ -293,7 +283,6 @@ export default function AttendancePage() {
 
       const capturedProfile = buildBehaviouralProfile(motionFeatures, touchFeatures, keystrokeFeatures)
 
-      // Fetch reference profile offline-first
       let referenceProfile = matchResult.match.behavioural_profile
 
       if (!referenceProfile) {
@@ -307,13 +296,13 @@ export default function AttendancePage() {
       }
 
       if (!referenceProfile) {
-        throw new Error('No reference behavioral profile found. Please register it at enrollment or contact support.')
+        throw new Error('No reference behavioural profile found. Please register it at enrollment or contact support.')
       }
 
       const score = compareBehaviouralProfiles(capturedProfile, referenceProfile)
 
       if (score < 0.65) {
-        throw new Error(`Behavioral verification failed (similarity: ${(score * 100).toFixed(1)}%). Try again.`)
+        throw new Error(`Behavioural verification failed (similarity: ${(score * 100).toFixed(1)}%). Try again.`)
       }
 
       await queueAttendance({
@@ -322,10 +311,9 @@ export default function AttendancePage() {
       })
 
       setPendingCount((await getPendingCount()) + (await getPresencePendingCount()))
-      setStep(3) // → Done
+      setStep(3)
     } catch (err) {
       setMatchError(err.message)
-      // Restart capturers
       motionCapturer.current?.start().catch(console.error)
       if (traceCanvasRef.current) touchCapturer.current?.start(traceCanvasRef.current)
       if (typingInputRef.current) keystrokeCapturer.current?.start(typingInputRef.current)
@@ -334,16 +322,13 @@ export default function AttendancePage() {
     }
   }
 
-  // ── Load course embeddings (offline-first) ─────────────────
   async function loadCourseEmbeddings(courseCode) {
-    // 1. Try Dexie cache first
     const cached = await db.biometricStore
       .where('course_code').equals(courseCode)
       .toArray()
 
     if (cached.length > 0) return cached
 
-    // 2. Fetch from backend and cache
     if (!navigator.onLine || !token) return []
 
     try {
@@ -353,7 +338,6 @@ export default function AttendancePage() {
       if (!res.ok) return []
       const data = await res.json()
 
-      // Cache in Dexie
       const records = data.embeddings.map(e => ({
         matric_number: e.matric_number,
         full_name:     e.full_name,
@@ -371,7 +355,6 @@ export default function AttendancePage() {
     }
   }
 
-  // ── Reset for retry ────────────────────────────────────────
   function reset() {
     setStep(0)
     setSessionData(null)
@@ -386,270 +369,293 @@ export default function AttendancePage() {
     setTypedText('')
   }
 
-  // ── Render ─────────────────────────────────────────────────
+  const stepItems = STEPS.map((item, index) =>
+    typeof item === 'number'
+      ? { value: item, label: `Step ${index + 1}` }
+      : { value: item.value, label: item.label }
+  )
+  const activeStepIndex = stepItems.findIndex(item => item.value === step)
+  const isPresenceResult = step === 3 && Boolean(sessionData?.event_type)
+
   return (
     <div className="focus-page">
       <div className="focus-shell">
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <Link to="/student" className="btn btn-ghost btn-sm">← Dashboard</Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
-            <div className={`sync-dot ${isOnline ? 'online' : 'offline'}`} />
-            {isOnline ? 'Online' : 'Offline'}
+        <div className="focus-header">
+          <Link to="/student" className="btn btn-ghost btn-sm">Back to dashboard</Link>
+          <div className="inline-meta">
+            <span className={`sync-dot ${isOnline ? 'online' : 'offline'}`} />
+            <span>{isOnline ? 'Online' : 'Offline'}</span>
             {pendingCount > 0 && <span className="badge badge-warning">{pendingCount} queued</span>}
           </div>
         </div>
 
-        {/* Step indicator */}
-        <div style={{ display: 'flex', gap: '0', marginBottom: '24px' }}>
-          {STEPS.map((s, i) => (
-            <div key={s} style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-              <div style={{ flex: 1, textAlign: 'center' }}>
-                <div className={`step-dot ${i === step ? 'active' : i < step ? 'done' : ''}`} style={{ margin: '0 auto 4px', width: 28, height: 28, fontSize: '12px' }}>
-                  {i < step ? '✓' : i + 1}
-                </div>
-                <div style={{ fontSize: '10px', color: i === step ? 'var(--brand-mid)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {s}
-                </div>
+        <div className="steps">
+          {stepItems.map((item, i) => (
+            <Fragment key={item.value}>
+              <div className={`step-item ${i === activeStepIndex ? 'active' : i < activeStepIndex ? 'done' : ''}`}>
+                <div className="step-dot">{i + 1}</div>
+                <span>{item.label}</span>
+                {i < activeStepIndex && <span className="badge badge-success">Done</span>}
               </div>
-              {i < STEPS.length - 1 && (
-                <div style={{ height: 2, flex: 0.5, background: i < step ? 'var(--brand-mid)' : 'var(--border-subtle)', transition: 'background 0.3s', margin: '0 4px', marginBottom: '20px' }} />
+              {i < stepItems.length - 1 && (
+                <div className={`step-connector ${i < activeStepIndex ? 'done' : ''}`} />
               )}
-            </div>
+            </Fragment>
           ))}
         </div>
 
-        {/* ── STEP 0: QR Scan ── */}
         {step === 0 && (
-          <div className="card fade-in-up">
-            <h3 style={{ marginBottom: '6px' }}>Scan Session QR</h3>
-            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
-              Scan the QR code displayed by your lecturer to begin attendance.
-            </p>
-
-            {scanError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{scanError}</div>}
-
-            {!manualEntry ? (
-              <>
-                {/* QR scanner renders here */}
-                <div id="qr-reader" ref={qrDivRef} style={{ borderRadius: '12px', overflow: 'hidden' }} />
-
-                <button
-                  className="btn btn-ghost btn-sm btn-full"
-                  style={{ marginTop: '16px' }}
-                  onClick={() => { scannerRef.current?.clear().catch(()=>{}); setManualEntry(true) }}
-                >
-                  Can't scan? Enter session code manually
-                </button>
-              </>
-            ) : (
-              <form onSubmit={handleManualSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="form-group">
-                  <label className="form-label">Session ID</label>
-                  <input
-                    type="text"
-                    className="form-input font-mono"
-                    placeholder="Paste session ID from lecturer"
-                    value={manualCode}
-                    onChange={e => setManualCode(e.target.value)}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="btn btn-ghost" onClick={() => setManualEntry(false)}>
-                    ← Back to Scanner
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">Attendance</div>
+                <h3 className="panel-title">Scan session QR</h3>
+                <p className="panel-subtitle">
+                  Scan the QR code displayed by your lecturer to begin attendance.
+                </p>
+              </div>
+            </div>
+            <div className="panel-body stack">
+              {scanError && <div className="alert alert-danger">{scanError}</div>}
+              {!manualEntry ? (
+                <>
+                  <div id="qr-reader" ref={qrDivRef} />
+                  <button
+                    className="btn btn-ghost btn-sm btn-full"
+                    onClick={() => { scannerRef.current?.clear().catch(()=>{}); setManualEntry(true) }}
+                  >
+                    Can't scan? Enter session code manually
                   </button>
-                  <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Continue</button>
-                </div>
-              </form>
-            )}
+                </>
+              ) : (
+                <form onSubmit={handleManualSubmit} className="stack">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="session-code">Session ID</label>
+                    <input
+                      id="session-code"
+                      type="text"
+                      className="form-input font-mono"
+                      placeholder="Paste session ID from lecturer"
+                      value={manualCode}
+                      onChange={e => setManualCode(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" className="btn btn-ghost" onClick={() => setManualEntry(false)}>
+                      Back to scanner
+                    </button>
+                    <button type="submit" className="btn btn-primary">Continue</button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         )}
 
-        {/* ── STEP 1: Liveness ── */}
         {step === 1 && (
-          <div className="card fade-in-up">
-            <div style={{ marginBottom: '12px' }}>
-              <div className="badge badge-brand" style={{ marginBottom: '6px' }}>{sessionData?.course_code}</div>
-              <h3 style={{ margin: 0 }}>Liveness Check</h3>
-              <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
-                Look at the camera and blink twice to prove you're present.
-              </p>
-            </div>
-            <FaceCamera
-              ref={faceCamRef}
-              mode="liveness"
-              onDetect={handleDetect}
-              requiredBlinks={2}
-            />
-            <div style={{ marginTop: '16px' }}>
-              <LivenessGate status={livenessStatus} rppgScore={rppgStatus?.score ?? null} />
-            </div>
-            {livenessStatus?.failed && (
-              <button className="btn btn-ghost btn-full" style={{ marginTop: '12px' }}
-                onClick={() => faceCamRef.current?.resetLiveness()}>
-                Retry Liveness
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP 2: Capture & Match ── */}
-        {step === 2 && (
-          <div className="card fade-in-up">
-            <h3 style={{ margin: '0 0 8px' }}>Verifying Identity</h3>
-            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
-              Hold still while we capture and match your face.
-            </p>
-
-            <FaceCamera ref={faceCamRef} mode="enroll" onDetect={handleDetect} requiredBlinks={0} />
-
-            <div style={{ marginTop: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
-                <span className="text-secondary">
-                  {isProcessing ? `Frame ${captureCount}/${CAPTURE_FRAMES}` : 'Queuing…'}
-                </span>
-                <span style={{ color: 'var(--brand-mid)', fontWeight: 600 }}>
-                  {Math.round((captureCount / CAPTURE_FRAMES) * 100)}%
-                </span>
-              </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${(captureCount / CAPTURE_FRAMES) * 100}%`, transition: 'width 0.4s ease' }} />
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">{sessionData?.course_code}</div>
+                <h3 className="panel-title">Liveness check</h3>
+                <p className="panel-subtitle">
+                  Look at the camera and blink twice to prove you're present.
+                </p>
               </div>
             </div>
-
-            {matchError && (
-              <div className="alert alert-danger" style={{ marginTop: '16px' }}>
-                {matchError}
-                <button className="btn btn-sm btn-ghost" style={{ marginTop: '10px' }} onClick={reset}>
-                  Start Over
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP 3: Done ── */}
-        {step === 3 && matchResult && (
-          <div className="card fade-in-up text-center" style={{ padding: '40px 32px' }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: '50%', margin: '0 auto 20px',
-              background: 'var(--success-bg)', border: '2px solid var(--success)',
-               display: 'grid', placeItems: 'center', fontSize: '32px',
-             }}>
-              ✓
-            </div>
-
-            <h2 style={{ marginBottom: '6px' }}>Attendance Marked!</h2>
-            <p style={{ color: 'var(--text-secondary)', marginBottom: '4px' }}>
-              {matchResult.match.full_name}
-            </p>
-            <p className="font-mono text-sm text-muted" style={{ marginBottom: '20px' }}>
-              {matchResult.match.matric_number}
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
-              <div className="stat-card" style={{ minWidth: 100 }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--success)' }}>
-                  {(matchResult.similarity * 100).toFixed(1)}%
-                </div>
-                <div className="stat-label">Similarity</div>
-              </div>
-              <div className="stat-card" style={{ minWidth: 100 }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--brand-mid)' }}>
-                  {matchResult.distance.toFixed(3)}
-                </div>
-                <div className="stat-label">Distance</div>
-              </div>
-              <div className="stat-card" style={{ minWidth: 100 }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: isOnline ? 'var(--success)' : 'var(--warning)' }}>
-                  {isOnline ? 'Synced' : 'Queued'}
-                </div>
-                <div className="stat-label">Status</div>
-              </div>
-            </div>
-
-            {!isOnline && pendingCount > 0 && (
-              <div className="alert alert-warning text-sm" style={{ marginBottom: '16px', textAlign: 'left' }}>
-                You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-              <button className="btn btn-ghost" onClick={reset}>Mark Another</button>
-              <Link to="/student" className="btn btn-primary">Back to Dashboard</Link>
-            </div>
-          </div>
-        )}
-
-        {/* ── STEP 5: Behavioral Verification ── */}
-        {step === 5 && matchResult && (
-          <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '8px' }}>Behavioral Verification Required</h3>
-            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
-              We detected look-alike matches. Please trace a circle inside the target box and type your matriculation number below to verify your identity.
-            </p>
-
-            {matchError && (
-              <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
-                {matchError}
-              </div>
-            )}
-
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>
-                1. Trace a circle inside this target box:
-              </label>
-              <div
-                ref={traceCanvasRef}
-                style={{
-                  height: 120,
-                  border: '2px dashed var(--brand-mid)',
-                  borderRadius: 12,
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: 'rgba(255,255,255,0.02)',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                  cursor: 'crosshair',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
-                  Draw a circle or path here
-                </span>
-              </div>
-            </div>
-
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <label className="form-label" htmlFor="behavioural-typing">
-                2. Type your matriculation number ({matchResult.match.matric_number}):
-              </label>
-              <input
-                ref={typingInputRef}
-                id="behavioural-typing"
-                type="text"
-                className="form-input font-mono"
-                placeholder="Type your matric number here..."
-                value={typedText}
-                onChange={e => setTypedText(e.target.value)}
-                required
-                spellCheck="false"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
+            <div className="panel-body stack">
+              <FaceCamera
+                ref={faceCamRef}
+                mode="liveness"
+                onDetect={handleDetect}
+                requiredBlinks={2}
               />
+              <LivenessGate status={livenessStatus} rppgScore={rppgStatus?.score ?? null} />
+              {livenessStatus?.failed && (
+                <button className="btn btn-ghost btn-full" onClick={() => faceCamRef.current?.resetLiveness()}>
+                  Retry liveness
+                </button>
+              )}
             </div>
+          </div>
+        )}
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+        {step === 2 && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">Identity check</div>
+                <h3 className="panel-title">Verifying identity</h3>
+                <p className="panel-subtitle">Hold still while we capture and match your face.</p>
+              </div>
+            </div>
+            <div className="panel-body stack">
+              <FaceCamera ref={faceCamRef} mode="enroll" onDetect={handleDetect} requiredBlinks={0} />
+
+              <div className="stack-sm">
+                <div className="loading-state">
+                  <span className="spinner" />
+                  <span>{isProcessing ? `Frame ${captureCount}/${CAPTURE_FRAMES}` : 'Queuing...'}</span>
+                </div>
+                <div className="progress-track">
+                  <div className="progress-fill" style={{ width: `${(captureCount / CAPTURE_FRAMES) * 100}%` }} />
+                </div>
+              </div>
+
+              {matchError && (
+                <div className="alert alert-danger">
+                  <span>{matchError}</span>
+                  <div className="form-actions">
+                    <button className="btn btn-sm btn-ghost" onClick={reset}>Start over</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isPresenceResult && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">{sessionData.course_code}</div>
+                <h2 className="panel-title">Presence submitted</h2>
+                <p className="panel-subtitle">
+                  {sessionData.event_type === 'check_out' ? 'Check-out submitted for verification' : 'Checkpoint submitted for verification'}
+                </p>
+              </div>
+              <span className="badge badge-info">Submitted</span>
+            </div>
+            <div className="panel-body stack">
+              <div className="inline-meta">
+                <span className="text-muted">Session</span>
+                <strong className="font-mono">{sessionData.session_id}</strong>
+              </div>
+              <div className="alert alert-info">
+                Your presence evidence is saved on this device. It appears in the lecturer review after sync and verification.
+              </div>
+              {!isOnline && pendingCount > 0 && (
+                <div className="alert alert-warning">
+                  You're offline. Your presence record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
+                </div>
+              )}
+            </div>
+            <div className="panel-footer">
+              <button className="btn btn-ghost" onClick={reset}>Record another</button>
+              <Link to="/student" className="btn btn-primary">Back to dashboard</Link>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && matchResult && !isPresenceResult && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">Attendance</div>
+                <h2 className="panel-title">Attendance marked</h2>
+                <p className="panel-subtitle">Your attendance record has been submitted.</p>
+              </div>
+              <span className="badge badge-success">Recorded</span>
+            </div>
+            <div className="panel-body stack">
+              <div className="inline-meta">
+                <strong>{matchResult.match.full_name}</strong>
+                <span className="font-mono">{matchResult.match.matric_number}</span>
+              </div>
+              <div className="field-grid">
+                <div className="stat-card">
+                  <div className="stat-value tabular">{(matchResult.similarity * 100).toFixed(1)}%</div>
+                  <div className="stat-label">Similarity</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value tabular">{matchResult.distance.toFixed(3)}</div>
+                  <div className="stat-label">Distance</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value tabular">{isOnline ? 'Synced' : 'Queued'}</div>
+                  <div className="stat-label">Status</div>
+                </div>
+              </div>
+              {!isOnline && pendingCount > 0 && (
+                <div className="alert alert-warning">
+                  You're offline. Your record is saved locally and will sync automatically when you reconnect ({pendingCount} pending).
+                </div>
+              )}
+            </div>
+            <div className="panel-footer">
+              <button className="btn btn-ghost" onClick={reset}>Mark another</button>
+              <Link to="/student" className="btn btn-primary">Back to dashboard</Link>
+            </div>
+          </div>
+        )}
+
+        {step === 5 && matchResult && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <div className="eyebrow">Additional check</div>
+                <h3 className="panel-title">Behavioural verification required</h3>
+                <p className="panel-subtitle">
+                  We detected look-alike matches. Trace a circle inside the target box and type your matriculation number below to verify your identity.
+                </p>
+              </div>
+            </div>
+            <div className="panel-body stack">
+              {matchError && <div className="alert alert-danger">{matchError}</div>}
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="behavioural-trace">
+                  1. Trace a circle inside this target box
+                </label>
+                <canvas
+                  id="behavioural-trace"
+                  ref={traceCanvasRef}
+                  aria-label="Trace a circle inside this target box"
+                  className="w-full"
+                  style={{
+                    height: 120,
+                    border: '2px dashed var(--accent-border)',
+                    borderRadius: 12,
+                    background: 'var(--bg-subtle)',
+                    userSelect: 'none',
+                    touchAction: 'none',
+                    cursor: 'crosshair',
+                  }}
+                >
+                  Draw a circle or path here
+                </canvas>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="behavioural-typing">
+                  2. Type your matriculation number ({matchResult.match.matric_number})
+                </label>
+                <input
+                  ref={typingInputRef}
+                  id="behavioural-typing"
+                  type="text"
+                  className="form-input font-mono"
+                  placeholder="Type your matric number here..."
+                  value={typedText}
+                  onChange={e => setTypedText(e.target.value)}
+                  required
+                  spellCheck="false"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                />
+              </div>
+            </div>
+            <div className="panel-footer">
               <button className="btn btn-ghost" onClick={reset}>Cancel</button>
               <button
                 id="btn-behavioural-verify"
                 className="btn btn-primary"
-                style={{ flex: 1 }}
                 disabled={isProcessing}
                 onClick={handleBehaviouralVerify}
               >
-                {isProcessing ? <><div className="spinner" /> Verifying…</> : 'Verify Identity'}
+                {isProcessing ? <><span className="spinner" /> Verifying...</> : 'Verify identity'}
               </button>
             </div>
           </div>

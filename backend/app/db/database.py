@@ -9,7 +9,7 @@ load_dotenv()
 _raw_url = os.getenv("DATABASE_URL", "")
 DATABASE_URL = _raw_url.replace("postgres://", "postgresql://", 1) if _raw_url else None
 
-# Lazy singleton — created on first use so the app can still start
+# Lazy singleton: created on first use so the app can still start
 # even if DATABASE_URL is not yet injected at import time.
 _pool = None
 

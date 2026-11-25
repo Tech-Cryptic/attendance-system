@@ -64,13 +64,13 @@ npm run build
 
 Backend variables are documented in `backend/.env.example`:
 
-- `DATABASE_URL` — PostgreSQL connection string.
-- `JWT_SECRET`, `HMAC_KEY` — generated secrets; never commit real values.
-- `JWT_ALGORITHM`, `JWT_EXPIRY_MINUTES` — token settings.
-- `CORS_ORIGINS` — comma-separated browser origins.
-- `FRONTEND_URL` — base URL used in exemption links.
-- `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL` — optional LLM review settings.
-- `SHOW_SEED_SUMMARY` — set to `0` in production to keep demo credentials and enrollment tokens out of startup logs.
+- `DATABASE_URL`: PostgreSQL connection string.
+- `JWT_SECRET`, `HMAC_KEY`: generated secrets. Never commit real values.
+- `JWT_ALGORITHM`, `JWT_EXPIRY_MINUTES`: token settings.
+- `CORS_ORIGINS`: comma-separated browser origins.
+- `FRONTEND_URL`: base URL used in exemption links.
+- `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`: optional LLM review settings.
+- `SHOW_SEED_SUMMARY`: set to `0` in production to keep demo credentials and enrollment tokens out of startup logs.
 
 Frontend uses `VITE_API_URL` for local development. In production it is unset so the API shares the deployed origin.
 
@@ -82,5 +82,5 @@ Frontend uses `VITE_API_URL` for local development. In production it is unset so
 
 ## Documentation
 
-- `docs/ATTENDANCE_POLICY.md` — presence rules, exemption flow, LLM review, and API summary.
-- `backend/migrations/` — idempotent SQL migrations applied by `seed.py`.
+- `docs/ATTENDANCE_POLICY.md`: presence rules, exemption flow, LLM review, and API summary.
+- `backend/migrations/`: idempotent SQL migrations applied by `seed.py`.

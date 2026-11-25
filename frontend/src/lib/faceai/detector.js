@@ -1,5 +1,5 @@
 /**
- * Face AI Detector — @vladmandic/human pipeline
+ * Face AI Detector, @vladmandic/human pipeline
  *
  * Core functions:
  *  - initHuman()          : load models, warm up WebGPU/WebGL shaders
@@ -16,7 +16,7 @@
 import Human from '@vladmandic/human'
 import { humanConfig } from './humanConfig'
 
-// ── Singleton Human instance ───────────────────────────────────
+// -- Singleton Human instance -----------------------------------
 let humanInstance = null
 let isReady = false
 
@@ -44,7 +44,7 @@ export async function initHuman(onProgress) {
 
   // Detect actual backend used (WebGPU may fall back to WebGL)
   const backend = humanInstance.tf.getBackend()
-  console.info(`[FaceAI] Ready — backend: ${backend}`)
+  console.info(`[FaceAI] Ready, backend: ${backend}`)
 
   isReady = true
   return humanInstance
@@ -62,7 +62,7 @@ export function getBackendName() {
   return humanInstance?.tf?.getBackend() ?? 'uninitialized'
 }
 
-// ── Core Detection ─────────────────────────────────────────────
+// -- Core Detection ---------------------------------------------
 
 /**
  * Run a full face inference pass on a video/canvas element.
@@ -83,36 +83,36 @@ export async function detectAndEmbed(source) {
   if (!face.embedding || face.embedding.length !== 1024) return null
 
   return {
-    // ── Face Embedding ──────────────────────────────────────
-    embedding:    face.embedding,      // Float32Array[1024] — FaceRes descriptor
+    // -- Face Embedding --------------------------------------
+    embedding:    face.embedding,      // Float32Array[1024], FaceRes descriptor
 
-    // ── Mesh & Geometry ─────────────────────────────────────
-    mesh:         face.mesh,           // Float32Array[478*3] — 3D face mesh
+    // -- Mesh & Geometry -------------------------------------
+    mesh:         face.mesh,           // Float32Array[478*3], 3D face mesh
     annotations:  face.annotations,   // named landmark groups (leftEye, rightEye, etc.)
-    box:          face.box,            // [x, y, w, h] — bounding box in pixel coords
-    boxRaw:       face.boxRaw,         // [x, y, w, h] — normalized 0–1
+    box:          face.box,            // [x, y, w, h], bounding box in pixel coords
+    boxRaw:       face.boxRaw,         // [x, y, w, h], normalized 0 to 1
 
-    // ── Iris ────────────────────────────────────────────────
+    // -- Iris ------------------------------------------------
     iris:         face.iris,           // iris landmarks (human.js extended set)
-    irisDistance: face.iris,           // raw — processed in extractIrisDescriptor()
+    irisDistance: face.iris,           // raw, processed in extractIrisDescriptor()
     irisDescriptor: extractIrisDescriptor(face),
 
-    // ── Liveness & Antispoof ─────────────────────────────────
-    // Values 0–1, higher = more likely real / live
+    // -- Liveness & Antispoof ---------------------------------
+    // Values 0 to 1, higher = more likely real / live
     antispoofScore: face.real  ?? null,   // passive antispoof model score
     livenessScore:  face.live  ?? null,   // passive liveness model score
     faceScore:      face.faceScore,       // face detection confidence
 
-    // ── Age/Gender (supplementary, not used for matching) ───
+    // -- Age/Gender (supplementary, not used for matching) ---
     age:    face.age    ?? null,
     gender: face.gender ?? null,
 
-    // ── Raw human.js result (needed for draw utilities) ─────
+    // -- Raw human.js result (needed for draw utilities) -----
     rawResult: result,
   }
 }
 
-// ── Multi-Face Batch Detection ──────────────────────────────────
+// -- Multi-Face Batch Detection ----------------------------------
 
 /**
  * Run a full face inference pass and return ALL detected faces.
@@ -124,7 +124,7 @@ export async function detectAndEmbed(source) {
  * Each result includes:
  *  - embedding       : 1024-dim FaceRes descriptor for matching
  *  - box / boxRaw    : bounding box for UI overlay rendering
- *  - antispoofScore  : passive liveness — filters photo attacks
+ *  - antispoofScore  : passive liveness, filters photo attacks
  *  - faceScore       : detection confidence
  *
  * NDPA compliance: no frame data leaves this module.
@@ -147,7 +147,7 @@ export async function detectAndEmbedAll(source, antispoofThreshold = 0.4) {
     if (!face.embedding || face.embedding.length !== 1024) continue
     if (face.faceScore < 0.4) continue
 
-    // Passive antispoof filter — blocks photo/screen attacks in batch mode
+    // Passive antispoof filter, blocks photo/screen attacks in batch mode
     const antispoofScore = face.real ?? null
     if (antispoofScore !== null && antispoofScore < antispoofThreshold) continue
 
@@ -167,7 +167,7 @@ export async function detectAndEmbedAll(source, antispoofThreshold = 0.4) {
 
 
 
-// ── Iris Descriptor ────────────────────────────────────────────
+// -- Iris Descriptor --------------------------------------------
 
 /**
  * Extract a lightweight iris biometric feature vector from iris landmarks.
@@ -179,10 +179,10 @@ export async function detectAndEmbedAll(source, antispoofThreshold = 0.4) {
  * - Left/right iris comparison ratios
  *
  * This is a supplementary discriminator for the twin disambiguation
- * branch — it does NOT replace the 1024-dim face embedding.
+ * branch, it does NOT replace the 1024-dim face embedding.
  *
  * @param {Object} face - human.js face result object
- * @returns {Float32Array|null} — 20-dim iris descriptor
+ * @returns {Float32Array|null}, 20-dim iris descriptor
  */
 export function extractIrisDescriptor(face) {
   if (!face.annotations) return null
@@ -220,11 +220,11 @@ export function extractIrisDescriptor(face) {
   }
 }
 
-// ── Similarity Metrics ─────────────────────────────────────────
+// -- Similarity Metrics -----------------------------------------
 
 /**
  * Cosine similarity between two embedding vectors.
- * Returns value in range [0, 1] — higher = more similar.
+ * Returns value in range [0, 1], higher = more similar.
  * Threshold for same-person: typically > 0.6
  *
  * @param {Float32Array|number[]} a
@@ -252,7 +252,7 @@ export function cosineDistance(a, b) {
 
 /**
  * Euclidean distance between two embeddings.
- * Alternative metric — used for twin-flag comparison at enrollment.
+ * Alternative metric, used for twin-flag comparison at enrollment.
  */
 export function euclideanDistance(a, b) {
   let sum = 0
@@ -260,7 +260,7 @@ export function euclideanDistance(a, b) {
   return Math.sqrt(sum)
 }
 
-// ── Course-Scoped Nearest Neighbour Match ─────────────────────
+// -- Course-Scoped Nearest Neighbour Match ---------------------
 
 /**
  * Match a probe embedding against all enrolled embeddings for a course.
@@ -271,9 +271,9 @@ export function euclideanDistance(a, b) {
  * not against the full student table.
  *
  * Three-band architecture:
- *  - 'high'      : similarity >= 0.82 — strong match, auto-accept
- *  - 'uncertain' : similarity >= threshold — marginal match, flag for review
- *  - 'reject'    : similarity < threshold — no match
+ *  - 'high'      : similarity >= 0.82, strong match, auto-accept
+ *  - 'uncertain' : similarity >= threshold, marginal match, flag for review
+ *  - 'reject'    : similarity < threshold, no match
  *
  * @param {Float32Array}  probeEmbedding   - live extracted embedding
  * @param {Array}         courseEmbeddings - from getEmbeddingsByCourse()
@@ -330,7 +330,7 @@ export function matchEmbedding(probeEmbedding, courseEmbeddings, threshold = 0.6
  * Used during enrollment to reduce per-frame noise.
  *
  * @param {Float32Array[]} embeddings - array of N embeddings
- * @returns {Float32Array} — averaged 1024-dim vector
+ * @returns {Float32Array}, averaged 1024-dim vector
  */
 export function averageEmbeddings(embeddings) {
   const dim = embeddings[0].length

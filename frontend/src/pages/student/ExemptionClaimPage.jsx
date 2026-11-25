@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { API_BASE } from '../../lib/api'
 
-/** Claim a lecturer-issued exemption after authentication. */
 export default function ExemptionClaimPage() {
   const { token } = useParams()
   const { authFetch } = useAuth()
@@ -47,22 +46,27 @@ export default function ExemptionClaimPage() {
 
   return (
     <div className="focus-page">
-      <div className="focus-card fade-in-up">
-        <h1 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--sp-2)' }}>Attendance exemption</h1>
+      <div className="focus-card stack fade-in-up">
+        <h1 className="focus-title">Attendance exemption</h1>
 
-        {status === 'loading' && <p className="text-secondary">Checking your link…</p>}
+        {status === 'loading' && (
+          <div className="loading-state">
+            <span className="spinner" />
+            <span>Checking your link...</span>
+          </div>
+        )}
 
         {status === 'error' && <div className="alert alert-danger">{message}</div>}
 
         {status !== 'loading' && status !== 'error' && preview && (
           <>
-            <p className="text-secondary" style={{ marginBottom: 'var(--sp-4)' }}>
+            <p className="text-secondary">
               Course <strong>{preview.course_code}</strong>
             </p>
 
             {status === 'ready' && (
               <button className="btn btn-primary" onClick={handleClaim} disabled={claiming}>
-                {claiming ? 'Claiming…' : 'Confirm attendance exemption'}
+                {claiming ? 'Claiming...' : 'Confirm attendance exemption'}
               </button>
             )}
 

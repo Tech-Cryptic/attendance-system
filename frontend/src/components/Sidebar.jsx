@@ -3,7 +3,6 @@ import { useAuth } from '../context/AuthContext'
 import { useState, useEffect } from 'react'
 import { getPendingCount } from '../lib/db/queries'
 
-// ── Icons (inline SVG, no external icon library needed) ─────────
 const Icons = {
   dashboard: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -63,7 +62,6 @@ const Icons = {
   ),
 }
 
-// ── Nav config per role ─────────────────────────────────────────
 const navConfig = {
   admin: [
     { to: '/admin',           label: 'Dashboard',   icon: Icons.dashboard },
@@ -86,7 +84,6 @@ const navConfig = {
   ],
 }
 
-// ── Face icon for logo ──────────────────────────────────────────
 function LogoIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -103,7 +100,6 @@ export default function Sidebar({ mobileOpen, onClose }) {
   const navigate = useNavigate()
   const [pendingCount, setPendingCount] = useState(0)
 
-  // Poll pending sync count every 5s
   useEffect(() => {
     const update = async () => {
       try { setPendingCount(await getPendingCount()) } catch { setPendingCount(0) }
@@ -116,26 +112,22 @@ export default function Sidebar({ mobileOpen, onClose }) {
   const navItems = navConfig[user?.role] ?? []
 
   async function handleLogout() {
-    await logout(false) // keep local data on shared devices by default
+    await logout(false)
     navigate('/login')
   }
 
   return (
     <aside className={`sidebar${mobileOpen ? ' mobile-open' : ''}`} role="navigation" aria-label="Main navigation">
-      {/* Logo */}
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">
           <LogoIcon />
         </div>
-        <div>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>FaceAttend</div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            {user?.role ?? 'System'}
-          </div>
+        <div className="stack-sm">
+          <div className="font-semibold">FaceAttend</div>
+          <div className="eyebrow">{user?.role ?? 'System'}</div>
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="sidebar-nav">
         {navItems.map(item => (
           <NavLink
@@ -151,34 +143,19 @@ export default function Sidebar({ mobileOpen, onClose }) {
         ))}
       </nav>
 
-      {/* Footer: sync status + user + logout */}
-      <div className="sidebar-footer">
-        {/* Offline sync indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '12px', color: 'var(--text-muted)' }}>
-          <div className={`sync-dot ${pendingCount > 0 ? 'offline' : 'online'}`} />
-          {pendingCount > 0 ? `${pendingCount} record${pendingCount > 1 ? 's' : ''} pending sync` : 'All synced'}
+      <div className="sidebar-footer stack-sm">
+        <div className="inline-meta">
+          <span className={`sync-dot ${pendingCount > 0 ? 'offline' : 'online'}`} />
+          <span>{pendingCount > 0 ? `${pendingCount} record${pendingCount > 1 ? 's' : ''} pending sync` : 'All synced'}</span>
         </div>
 
-        {/* User info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--accent-muted)',
-            border: '1px solid var(--accent-border)',
-            display: 'grid', placeItems: 'center',
-            fontSize: 'var(--text-sm)', fontWeight: 700,
-            color: 'var(--accent)',
-            flexShrink: 0,
-          }}>
+        <div className="flex items-center gap-3">
+          <div className="sidebar-logo-icon">
             {user?.full_name?.[0]?.toUpperCase() ?? '?'}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.full_name ?? 'Unknown'}
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {user?.email ?? ''}
-            </div>
+          <div className="w-full">
+            <div className="text-sm font-semibold">{user?.full_name ?? 'Unknown'}</div>
+            <div className="text-xs text-muted">{user?.email ?? ''}</div>
           </div>
         </div>
 

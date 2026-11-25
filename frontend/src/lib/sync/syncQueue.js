@@ -1,6 +1,6 @@
 ﻿import { API_BASE } from '../../lib/api'
 /**
- * Sync Queue — Offline-First Attendance Sync Manager
+ * Sync Queue, Offline-First Attendance Sync Manager
  *
  * Architecture (Section 3.7.2):
  *   1. Attendance records are written to Dexie `attendanceQueue` FIRST,
@@ -19,7 +19,7 @@ import { toast } from '../../components/Toast'
 const SYNC_DEBOUNCE_MS = 2000
 const MAX_RETRY = 3
 
-// ── Event emitter (lightweight) ────────────────────────────────
+// -- Event emitter (lightweight) --------------------------------
 const listeners = new Set()
 
 export function onSyncEvent(fn) {
@@ -32,15 +32,15 @@ function emit(event) {
     try { fn(event) } catch { listeners.delete(fn) }
   }
 
-  // ── Toast notifications on key events ──────────────────────
-  if (event.type === 'online')         toast.info('Back online — syncing attendance…')
+  // -- Toast notifications on key events ----------------------
+  if (event.type === 'online')         toast.info('Back online. Syncing attendance...')
   if (event.type === 'offline')        toast.warning('You\'re offline. Records will sync when reconnected.')
   if (event.type === 'sync_complete' && event.synced > 0)
     toast.success(`${event.synced} attendance record${event.synced > 1 ? 's' : ''} synced successfully.`)
   if (event.type === 'sync_complete' && event.failed > 0)
     toast.error(`${event.failed} record${event.failed > 1 ? 's' : ''} failed to sync.`)
   if (event.type === 'record_failed' && event.permanent)
-    toast.error('A record could not be synced — session may have expired.')
+    toast.error('A record could not be synced, session may have expired.')
   if (event.type === 'presence_sync_complete' && event.synced > 0)
     toast.info(`${event.synced} presence check${event.synced > 1 ? 's' : ''} synced.`)
   if (event.type === 'presence_sync_paused')
@@ -48,7 +48,7 @@ function emit(event) {
 }
 
 
-// ── Queue a new attendance record ──────────────────────────────
+// -- Queue a new attendance record ------------------------------
 
 /**
  * Queue an attendance record for sync.
@@ -77,7 +77,7 @@ export async function queueAttendance(record) {
   return id
 }
 
-// ── Queue status helpers ───────────────────────────────────────
+// -- Queue status helpers ---------------------------------------
 
 export async function getPendingCount() {
   return db.attendanceQueue.where('status').equals('pending').count()
@@ -91,7 +91,7 @@ export async function clearSyncedRecords() {
   await db.attendanceQueue.where('status').equals('synced').delete()
 }
 
-// ── Drain the queue ────────────────────────────────────────────
+// -- Drain the queue --------------------------------------------
 
 let draining = false
 let presenceDraining = false
@@ -149,7 +149,7 @@ export async function drainQueue() {
           emit({ type: 'record_synced', id: record.id, data })
 
         } else if (res.status === 403 || res.status === 401) {
-          // Session expired / invalid QR — permanent failure, don't retry
+          // Session expired / invalid QR, permanent failure, don't retry
           await db.attendanceQueue.update(record.id, {
             status: 'failed',
             error:  `HTTP ${res.status}: Session expired or invalid`,
@@ -158,7 +158,7 @@ export async function drainQueue() {
           emit({ type: 'record_failed', id: record.id, permanent: true })
 
         } else {
-          // Transient error — increment retry counter
+          // Transient error, increment retry counter
           const retries = (record.retries ?? 0) + 1
           if (retries >= MAX_RETRY) {
             await db.attendanceQueue.update(record.id, {
@@ -172,7 +172,7 @@ export async function drainQueue() {
         }
 
       } catch (err) {
-        // Network error — will retry next time online
+        // Network error, will retry next time online
         emit({ type: 'record_error', id: record.id, error: err.message })
       }
     }
@@ -189,7 +189,7 @@ export async function drainQueue() {
   }
 }
 
-// ── Presence evidence queue ─────────────────────────────────────────
+// -- Presence evidence queue -----------------------------------------
 
 /** Drain `presenceQueue` through POST /presence/events. */
 export async function drainPresenceQueue() {
@@ -275,7 +275,7 @@ export async function drainPresenceQueue() {
           }
         }
       } catch {
-        // Network error — keep pending for the next online event.
+        // Network error, keep pending for the next online event.
       }
     }
 
@@ -285,7 +285,7 @@ export async function drainPresenceQueue() {
   }
 }
 
-// ── Online/offline watcher ─────────────────────────────────────
+// -- Online/offline watcher -------------------------------------
 
 let syncTimer = null
 
@@ -327,7 +327,7 @@ export function startSyncManager() {
   }
 }
 
-// ── Device UUID (stable per-browser-install) ───────────────────
+// -- Device UUID (stable per-browser-install) -------------------
 
 function getClientUUID() {
   let id = localStorage.getItem('faceattend_client_uuid')

@@ -14,7 +14,7 @@ export default defineConfig({
         type: 'module',
       },
       manifest: {
-        name: 'FaceAttend — Course Attendance',
+        name: 'FaceAttend: Course Attendance',
         short_name: 'FaceAttend',
         description: 'Offline-first course attendance with signed presence evidence and server-owned outcomes.',
         theme_color: '#f4f6f4',

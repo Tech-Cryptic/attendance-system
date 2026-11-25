@@ -83,7 +83,7 @@ def _audit(cur, *, review_id, session_id, matric_number, action, actor_id, detai
     )
 
 
-# ── Checkpoint QR generation (lecturer) ──────────────────────────────
+# -- Checkpoint QR generation (lecturer) ------------------------------
 
 @router.post('/presence/checkpoints', response_model=CheckpointOut)
 def create_checkpoint(
@@ -153,7 +153,7 @@ def create_checkpoint(
         release_connection(conn)
 
 
-# ── Evidence ingestion (student, offline-safe) ───────────────────────
+# -- Evidence ingestion (student, offline-safe) -----------------------
 
 @router.post('/presence/events')
 def submit_presence_events(
@@ -289,7 +289,7 @@ def submit_presence_events(
         release_connection(conn)
 
 
-# ── Finalisation ─────────────────────────────────────────────────────
+# -- Finalisation -----------------------------------------------------
 
 def _event_dict(row) -> dict:
     return {
@@ -451,7 +451,7 @@ def get_outcomes(
         release_connection(conn)
 
 
-# ── Manual exemption (dead phone / device unavailable) ───────────────
+# -- Manual exemption (dead phone / device unavailable) ---------------
 
 @router.post('/presence/exemptions')
 def create_exemption(
@@ -657,7 +657,7 @@ def claim_exemption(
         release_connection(conn)
 
 
-# ── LLM-assisted review (advisory, human-approved) ──────────────────
+# -- LLM-assisted review (advisory, human-approved) ------------------
 
 @router.post('/presence/reviews/generate')
 def generate_review(

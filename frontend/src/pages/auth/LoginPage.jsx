@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
-// ── Icons ──────────────────────────────────────────────────────
+// -- Icons ------------------------------------------------------
 
 function FaceIcon() {
   return (
@@ -33,7 +33,7 @@ function EyeClosedIcon() {
   )
 }
 
-// ── Component ──────────────────────────────────────────────────
+// -- Component --------------------------------------------------
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -74,22 +74,17 @@ export default function LoginPage() {
         </div>
 
         {/* Heading */}
-        <div style={{ marginBottom: 'var(--sp-8)' }}>
-          <h1 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--sp-1)' }}>Sign in to FaceAttend</h1>
-          <p className="text-secondary" style={{ fontSize: 'var(--text-sm)' }}>
-            Unilorin biometric attendance — University of Ilorin
-          </p>
+        <div className="auth-heading">
+          <h1>Sign in to FaceAttend</h1>
+          <p className="text-secondary">Unilorin biometric attendance, University of Ilorin</p>
         </div>
 
+        <div className="stack">
         {/* Error */}
-        {error && (
-          <div className="alert alert-danger" style={{ marginBottom: '20px' }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-danger">{error}</div>}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <form onSubmit={handleSubmit} className="auth-form">
 
           {/* Email */}
           <div className="form-group">
@@ -109,7 +104,7 @@ export default function LoginPage() {
           {/* Password + eye toggle */}
           <div className="form-group">
             <label className="form-label" htmlFor="password">Password</label>
-            <div style={{ position: 'relative' }}>
+            <div className="password-field">
               <input
                 id="password"
                 type={showPass ? 'text' : 'password'}
@@ -118,31 +113,14 @@ export default function LoginPage() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 autoComplete="current-password"
-                style={{ paddingRight: '46px' }}
                 required
               />
               <button
                 id="btn-toggle-password"
                 type="button"
+                className="password-toggle"
                 onClick={() => setShowPass(v => !v)}
                 aria-label={showPass ? 'Hide password' : 'Show password'}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
               >
                 {showPass ? <EyeClosedIcon /> : <EyeOpenIcon />}
               </button>
@@ -152,25 +130,26 @@ export default function LoginPage() {
           <button
             id="btn-login"
             type="submit"
-            className="btn btn-primary btn-full"
-            disabled={loading}
-            style={{ marginTop: '8px' }}
-          >
-            {loading ? (
-              <><div className="spinner" /> Signing in…</>
-            ) : (
-              'Sign In'
-            )}
-          </button>
+          className="btn btn-primary btn-full"
+          disabled={loading}
+        >
+          {loading ? (
+            <><div className="spinner" /> Signing in...</>
+          ) : (
+            'Sign in'
+          )}
+        </button>
         </form>
-
-        {/* Student enroll note */}
-        <div className="divider-label" style={{ marginTop: '24px', fontSize: '12px', color: 'var(--text-muted)' }}>
-          New student?
         </div>
-        <p className="text-center text-sm" style={{ marginTop: '12px', color: 'var(--text-muted)' }}>
-          Use the enrollment link sent to you by your lecturer to register your face biometric.
-        </p>
+
+        {/* Student enrollment note */}
+        <div className="auth-note">
+          <div className="divider-label">New student?</div>
+          <p className="text-center text-muted">
+            Use the enrollment link sent to you by your lecturer to register your face biometric.
+          </p>
+        </div>
+
       </div>
     </div>
   )

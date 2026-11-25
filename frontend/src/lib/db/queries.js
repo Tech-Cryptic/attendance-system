@@ -1,9 +1,9 @@
 import { db } from './schema'
 
-/* ── Client UUID ─────────────────────────────────────────────
+/* -- Client UUID ---------------------------------------------
    A persistent device identifier used to tag offline records.
    Generated once and stored in appState.
-─────────────────────────────────────────────────────────────── */
+--------------------------------------------------------------- */
 export async function getClientUUID() {
   let record = await db.appState.get('client_uuid')
   if (!record) {
@@ -14,7 +14,7 @@ export async function getClientUUID() {
   return record.value
 }
 
-/* ── Student Queries ─────────────────────────────────────────── */
+/* -- Student Queries ------------------------------------------- */
 
 /**
  * Save a newly enrolled student record (without embedding).
@@ -45,7 +45,7 @@ export async function getStudentsByCourse(course_code) {
   return db.students.where('course_code').equals(course_code).toArray()
 }
 
-/* ── Embedding Queries ───────────────────────────────────────── */
+/* -- Embedding Queries ----------------------------------------- */
 
 /**
  * Save the 1024-dim FaceRes embedding + optional 512-dim iris embedding.
@@ -77,7 +77,7 @@ export async function deleteEmbedding(matric_number) {
   return db.embeddings.delete(matric_number)
 }
 
-/* ── Session Queries ─────────────────────────────────────────── */
+/* -- Session Queries ------------------------------------------- */
 
 export async function saveSession(session) {
   return db.sessions.put(session)
@@ -98,7 +98,7 @@ export async function getAllSessions() {
   return db.sessions.reverse().sortBy('expires_at')
 }
 
-/* ── Attendance Queue (Offline-First) ────────────────────────── */
+/* -- Attendance Queue (Offline-First) -------------------------- */
 
 /**
  * Queue an attendance record for later sync to the backend.
@@ -145,7 +145,7 @@ export async function getPendingCount() {
   return db.attendanceQueue.where('status').anyOf(['pending', 'failed']).count()
 }
 
-/* ── Sync Log ────────────────────────────────────────────────── */
+/* -- Sync Log -------------------------------------------------- */
 
 export async function logSync(session_id, record_count) {
   return db.syncLog.add({
@@ -159,7 +159,7 @@ export async function getSyncHistory() {
   return db.syncLog.reverse().limit(50).toArray()
 }
 
-/* ── App State ───────────────────────────────────────────────── */
+/* -- App State ------------------------------------------------- */
 
 export async function setAppState(key, value) {
   return db.appState.put({ key, value })
@@ -170,7 +170,7 @@ export async function getAppState(key) {
   return record?.value ?? null
 }
 
-/* ── Database Utilities ──────────────────────────────────────── */
+/* -- Database Utilities ---------------------------------------- */
 
 /**
  * Hard-reset the local database (used on logout for NDPR compliance:
@@ -180,7 +180,7 @@ export async function clearLocalData() {
   await db.transaction('rw', db.students, db.embeddings, db.sessions, db.attendanceQueue, async () => {
     await db.students.clear()
     await db.embeddings.clear()
-    // Keep sessions and queue — they may have unsynced records
+    // Keep sessions and queue, they may have unsynced records
   })
 }
 

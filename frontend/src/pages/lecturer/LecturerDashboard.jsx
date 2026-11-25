@@ -10,7 +10,7 @@ function authHeaders(token) {
 
 export default function LecturerDashboard({ defaultTab = 'overview' }) {
   const { user, token } = useAuth()
-  const [tab, setTab]   = useState(defaultTab)
+  const [tab, setTab] = useState(defaultTab)
   useEffect(() => { setTab(defaultTab) }, [defaultTab])
 
   const [sessions, setSessions] = useState([])
@@ -43,99 +43,90 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
   return (
     <AppShell
       title={user?.full_name}
-      subtitle="Lecturer · FaceAttend"
+      subtitle="Lecturer, FaceAttend"
       actions={<span className="badge badge-info">Lecturer</span>}
     >
-      {/* ── Metrics: inline row ── */}
-          <div className="metric-row">
-            <div className="metric-item">
-              <div className="metric-value" style={{ color: 'var(--accent)' }}>
-                {loading ? '—' : todaySessions.length}
-              </div>
-              <div className="metric-label">Sessions today</div>
-            </div>
-            <div className="metric-item">
-              <div className="metric-value">{loading ? '—' : sessions.length}</div>
-              <div className="metric-label">Total sessions</div>
-            </div>
-            <div className="metric-item">
-              <div className="metric-value">{loading ? '—' : avgAttendance}</div>
-              <div className="metric-label">Avg attendance</div>
-            </div>
-            <div className="metric-item">
-              <div className="metric-value" style={{ color: 'var(--accent)' }}>
-                {loading ? '—' : courses.length}
-              </div>
-              <div className="metric-label">Courses assigned</div>
-            </div>
+      <div className="metric-row">
+        <div className="metric-item">
+          <div className="metric-value text-brand">{loading ? '...' : todaySessions.length}</div>
+          <div className="metric-label">Sessions today</div>
+        </div>
+        <div className="metric-item">
+          <div className="metric-value">{loading ? '...' : sessions.length}</div>
+          <div className="metric-label">Total sessions</div>
+        </div>
+        <div className="metric-item">
+          <div className="metric-value">{loading ? '...' : avgAttendance}</div>
+          <div className="metric-label">Avg attendance</div>
+        </div>
+        <div className="metric-item">
+          <div className="metric-value text-brand">{loading ? '...' : courses.length}</div>
+          <div className="metric-label">Courses assigned</div>
+        </div>
+      </div>
+
+      <div className="tab-bar">
+        {[['overview', 'Overview'], ['history', 'Session history'], ['export', 'Export']].map(([id, label]) => (
+          <button key={id} className={`tab-btn ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="stack-lg">
+          <div className="toolbar">
+            <Link to="/lecturer/session/new" className="btn btn-primary">Start attendance session</Link>
           </div>
 
-          {/* ── Tab bar ── */}
-          <div className="tab-bar">
-            {[['overview', 'Overview'], ['history', 'Session history'], ['export', 'Export']].map(([id, label]) => (
-              <button key={id} className={`tab-btn ${tab === id ? 'active' : ''}`} onClick={() => setTab(id)}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Overview ── */}
-          {tab === 'overview' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
-
-              {/* Primary action — prominent, single, clear label */}
-              <Link to="/lecturer/session/new" className="btn btn-primary" style={{ alignSelf: 'flex-start' }}>
-                Start attendance session
-              </Link>
-
-              {/* Assigned courses */}
-              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--border-subtle)' }}>
-                  <h4 style={{ margin: 0 }}>Your courses</h4>
-                </div>
-                {courses.length === 0 ? (
-                  <div className="empty-state">
-                    <span className="empty-state-label">No courses assigned</span>
-                    <p>Ask an admin to assign courses to your account.</p>
-                  </div>
-                ) : (
-                  <div>
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Assignments</p>
+                <h3 className="panel-title">Your courses</h3>
+              </div>
+            </div>
+            {loading ? (
+              <div className="loading-state">Loading courses...</div>
+            ) : courses.length === 0 ? (
+              <div className="empty-state">
+                <span className="empty-state-label">No courses assigned</span>
+                <p>Ask an admin to assign courses to your account.</p>
+              </div>
+            ) : (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead><tr><th>Code</th><th>Title</th><th>Enrolled</th><th>Action</th></tr></thead>
+                  <tbody>
                     {courses.map(c => (
-                      <div key={c.course_code} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: 'var(--sp-3) var(--sp-5)',
-                        borderBottom: '1px solid var(--border-subtle)',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-                          <span className="badge badge-brand font-mono">{c.course_code}</span>
-                          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>{c.course_title}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
-                          <span className="text-muted" style={{ fontSize: 'var(--text-xs)' }}>
-                            {c.enrolled_count ?? 0} enrolled
-                          </span>
-                          <Link to="/lecturer/session/new" className="btn btn-ghost btn-sm">
-                            Start session →
-                          </Link>
-                        </div>
-                      </div>
+                      <tr key={c.course_code}>
+                        <td><span className="badge badge-brand font-mono">{c.course_code}</span></td>
+                        <td className="font-medium">{c.course_title}</td>
+                        <td className="text-muted tabular">{c.enrolled_count ?? 0} enrolled</td>
+                        <td>
+                          <Link to="/lecturer/session/new" className="btn btn-ghost btn-sm">Start session</Link>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                )}
+                  </tbody>
+                </table>
               </div>
+            )}
+          </div>
 
-              {/* Recent sessions (last 5) */}
-              {sessions.length > 0 && (
-                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                  <div style={{
-                    padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--border-subtle)',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  }}>
-                    <h4 style={{ margin: 0 }}>Recent sessions</h4>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setTab('history')}>
-                      All history →
-                    </button>
-                  </div>
+          {sessions.length > 0 && (
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Activity</p>
+                  <h3 className="panel-title">Recent sessions</h3>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setTab('history')}>All history</button>
+              </div>
+              {loading ? (
+                <div className="loading-state">Loading sessions...</div>
+              ) : (
+                <div className="table-wrapper">
                   <table className="data-table">
                     <thead><tr><th>Date</th><th>Course</th><th>Attendance</th><th>Status</th></tr></thead>
                     <tbody>
@@ -143,15 +134,15 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
                         const start = new Date(s.started_at)
                         return (
                           <tr key={s.session_id}>
-                            <td className="font-mono" style={{ fontSize: 'var(--text-xs)' }}>
+                            <td className="font-mono text-xs">
                               {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </td>
                             <td><span className="badge badge-brand font-mono">{s.course_code}</span></td>
-                            <td style={{ fontWeight: 600 }}>{s.attendance_count ?? 0} students</td>
+                            <td className="font-semibold tabular">{s.attendance_count ?? 0} students</td>
                             <td>
                               {s.active
                                 ? <span className="badge badge-success">Active</span>
-                                : <span className="badge" style={{ background: 'var(--border-subtle)', color: 'var(--text-muted)' }}>Ended</span>
+                                : <span className="badge text-muted">Ended</span>
                               }
                             </td>
                           </tr>
@@ -163,56 +154,55 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
               )}
             </div>
           )}
+        </div>
+      )}
 
-          {/* ── Session History ── */}
-          {tab === 'history' && (
-            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{
-                padding: 'var(--sp-4) var(--sp-5)', borderBottom: '1px solid var(--border-subtle)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}>
-                <h4 style={{ margin: 0 }}>Session history ({sessions.length})</h4>
-                <Link to="/lecturer/session/new" className="btn btn-primary btn-sm">
-                  New session
-                </Link>
-              </div>
-              <table className="data-table">
+      {tab === 'history' && (
+        <div className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Records</p>
+              <h3 className="panel-title">Session history ({sessions.length})</h3>
+            </div>
+            <Link to="/lecturer/session/new" className="btn btn-primary btn-sm">New session</Link>
+          </div>
+          {loading ? (
+            <div className="loading-state">Loading sessions...</div>
+          ) : sessions.length === 0 ? (
+            <div className="empty-state">
+              <span className="empty-state-label">No sessions yet</span>
+              <p>Start your first session from the overview tab.</p>
+            </div>
+          ) : (
+            <div className="table-wrapper">
+              <table className="data-table data-table--wide">
                 <thead>
-                  <tr><th>Date</th><th>Course</th><th>Duration</th><th>Attendance</th><th>Status</th><th></th></tr>
+                  <tr><th>Date</th><th>Course</th><th>Duration</th><th>Attendance</th><th>Status</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                  {sessions.length === 0 ? (
-                    <tr>
-                      <td colSpan={6}>
-                        <div className="empty-state">
-                          <span className="empty-state-label">No sessions yet</span>
-                          <p>Start your first session above.</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : sessions.map(s => {
+                  {sessions.map(s => {
                     const start   = new Date(s.started_at)
                     const end     = new Date(s.expires_at)
                     const durMins = Math.round((end - start) / 60000)
                     return (
                       <tr key={s.session_id}>
-                        <td className="font-mono" style={{ fontSize: 'var(--text-xs)' }}>
+                        <td className="font-mono text-xs">
                           {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </td>
                         <td><span className="badge badge-brand font-mono">{s.course_code}</span></td>
-                        <td className="text-muted" style={{ fontSize: 'var(--text-sm)' }}>{durMins} min</td>
+                        <td className="text-muted tabular">{durMins} min</td>
                         <td>
-                          <span style={{ fontWeight: 700 }}>{s.attendance_count ?? 0}</span>
-                          <span className="text-muted" style={{ fontSize: 'var(--text-xs)', marginLeft: 4 }}>students</span>
+                          <span className="font-semibold tabular">{s.attendance_count ?? 0}</span>
+                          <span className="text-muted text-xs"> students</span>
                         </td>
                         <td>
                           {s.active
                             ? <span className="badge badge-success">Active</span>
-                            : <span className="badge" style={{ background: 'var(--border-subtle)', color: 'var(--text-muted)' }}>Ended</span>
+                            : <span className="badge text-muted">Ended</span>
                           }
                         </td>
                         <td>
-                          <Link to={`/lecturer/session/${s.session_id}`} className="btn btn-ghost btn-sm">View →</Link>
+                          <Link to={`/lecturer/session/${s.session_id}`} className="btn btn-ghost btn-sm">View</Link>
                         </td>
                       </tr>
                     )
@@ -221,40 +211,41 @@ export default function LecturerDashboard({ defaultTab = 'overview' }) {
               </table>
             </div>
           )}
+        </div>
+      )}
 
-          {/* ── Export ── */}
-          {tab === 'export' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
-              <div className="section-intro">
-                <h4>Export attendance data</h4>
-                <p>Download your session records as a CSV file for your own records or to submit to the department.</p>
-              </div>
-
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
-                <div>
-                  <h4 style={{ marginBottom: 'var(--sp-1)' }}>Full attendance report</h4>
-                  <p className="text-sm" style={{ marginBottom: 'var(--sp-4)', margin: '0 0 var(--sp-4)' }}>
-                    All sessions with student names, matric numbers, timestamps, similarity scores,
-                    and liveness data.
-                  </p>
-                </div>
-                <a
-                  id="btn-lecturer-export-csv"
-                  href={`${API_BASE}/admin/export/attendance.csv`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-ghost"
-                  style={{ alignSelf: 'flex-start' }}
-                >
-                  Download attendance CSV
-                </a>
-              </div>
-
-              <p className="text-muted" style={{ fontSize: 'var(--text-xs)' }}>
-                Exports contain attendance metadata only; raw biometric data is not included.
-              </p>
+      {tab === 'export' && (
+        <div className="stack-lg">
+          <div className="section-heading">
+            <div>
+              <h3>Export attendance data</h3>
+              <p className="text-muted">Download session records as a CSV file for your records or to submit to the department.</p>
             </div>
-          )}
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Report</p>
+                <h3 className="panel-title">Full attendance report</h3>
+                <p className="panel-subtitle">All sessions with student names, matric numbers, timestamps, similarity scores, and liveness data.</p>
+              </div>
+            </div>
+            <div className="panel-body stack">
+              <a
+                id="btn-lecturer-export-csv"
+                href={`${API_BASE}/admin/export/attendance.csv`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost"
+              >
+                Download attendance CSV
+              </a>
+              <p className="text-muted text-xs">Exports contain attendance metadata only. Raw biometric data is not included.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   )
 }

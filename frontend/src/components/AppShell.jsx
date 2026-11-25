@@ -26,7 +26,12 @@ export default function AppShell({ title, subtitle, actions, children }) {
   return (
     <div className="app-layout">
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
-      <div className={`sidebar-backdrop${mobileOpen ? ' open' : ''}`} onClick={() => setMobileOpen(false)} />
+      <div
+        className={`sidebar-backdrop${mobileOpen ? ' open' : ''}`}
+        role="presentation"
+        aria-hidden="true"
+        onClick={() => setMobileOpen(false)}
+      />
       <div className="main-content">
         <header className="page-header">
           <div className="page-heading">

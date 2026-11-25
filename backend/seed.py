@@ -31,7 +31,7 @@ def apply_migrations(cur):
         print(f"   Applied migration {filename}")
 
 
-# ── Accounts to seed ──────────────────────────────────────────
+# -- Accounts to seed ------------------------------------------
 ACCOUNTS = [
     {
         "email":     "admin@unilorin.edu.ng",

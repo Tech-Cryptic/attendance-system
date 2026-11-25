@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import QRCode from 'qrcode'
 import { API_BASE } from '../../lib/api'
@@ -7,37 +7,38 @@ import ExemptionPanel from '../../components/ExemptionPanel'
 import PresenceReviewPanel from '../../components/PresenceReviewPanel'
 import { toast } from '../../components/Toast'
 
-
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 }
 
 export default function SessionPage() {
   const { token } = useAuth()
+  const { sessionId } = useParams()
 
-  // ── State ────────────────────────────────────────────────────
-  const [courses,        setCourses]        = useState([])
+  const [courses, setCourses] = useState([])
   const [selectedCourse, setSelectedCourse] = useState('')
-  const [duration,       setDuration]       = useState(10)   // default 10 min
-  const [extendedMode,   setExtendedMode]   = useState(false) // lecturer unlocks >30 min
-  const [creating,       setCreating]       = useState(false)
-  const [createError,    setCreateError]    = useState('')
+  const [duration, setDuration] = useState(10)
+  const [extendedMode, setExtendedMode] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [session, setSession] = useState(null)
+  const [sessionLoading, setSessionLoading] = useState(false)
+  const [sessionError, setSessionError] = useState('')
+  const [qrDataURL, setQrDataURL] = useState(null)
+  const [attendance, setAttendance] = useState([])
+  const [outcomes, setOutcomes] = useState([])
+  const [pollError, setPollError] = useState('')
+  const [outcomesRefresh, setOutcomesRefresh] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(null)
+  const [ending, setEnding] = useState(false)
+  const [checkpointQr, setCheckpointQr] = useState(null)
+  const [checkpointError, setCheckpointError] = useState('')
 
-
-  const [session,        setSession]        = useState(null)   // active session data
-  const [qrDataURL,      setQrDataURL]      = useState(null)
-  const [attendance,     setAttendance]     = useState([])
-  const [outcomes,       setOutcomes]       = useState([])
-  const [pollError,      setPollError]      = useState('')
-  const [timeLeft,       setTimeLeft]       = useState(null)   // seconds remaining
-  const [ending,         setEnding]         = useState(false)
-  const [checkpointQr,   setCheckpointQr]   = useState(null)
-  const [checkpointError,setCheckpointError]= useState('')
-
-  const pollRef  = useRef(null)
+  const pollRef = useRef(null)
   const timerRef = useRef(null)
 
-  // ── Load courses ─────────────────────────────────────────────
+  const viewingExisting = Boolean(sessionId)
+
   useEffect(() => {
     async function load() {
       try {
@@ -50,9 +51,33 @@ export default function SessionPage() {
     load()
   }, [token])
 
-  // ── Countdown timer ───────────────────────────────────────────
   useEffect(() => {
-    if (!session) return
+    if (!sessionId) return undefined
+    let cancelled = false
+    setSessionLoading(true)
+    setSessionError('')
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_BASE}/sessions/${sessionId}`, {
+          headers: authHeaders(token)
+        })
+        if (!res.ok) throw new Error('Could not load this session.')
+        const data = await res.json()
+        if (!cancelled) setSession(data)
+      } catch (err) {
+        if (!cancelled) setSessionError(err.message ?? 'Could not load this session.')
+      } finally {
+        if (!cancelled) setSessionLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [sessionId, token])
+
+  useEffect(() => {
+    if (!session) return undefined
     function tick() {
       const left = Math.max(0, Math.floor((new Date(session.expires_at) - Date.now()) / 1000))
       setTimeLeft(left)
@@ -62,9 +87,8 @@ export default function SessionPage() {
     return () => clearInterval(timerRef.current)
   }, [session])
 
-  // ── Live attendance polling ───────────────────────────────────
   useEffect(() => {
-    if (!session) return
+    if (!session) return undefined
     async function poll() {
       try {
         const res = await fetch(`${API_BASE}/sessions/${session.session_id}`, {
@@ -84,23 +108,11 @@ export default function SessionPage() {
     return () => clearInterval(pollRef.current)
   }, [session, token])
 
-  async function loadOutcomes() {
-    if (!session?.session_id) return
-    try {
-      const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
-        headers: authHeaders(token)
-      })
-      if (res.ok) setOutcomes(await res.json())
-    } catch {
-      setOutcomes([])
-    }
-  }
-
   useEffect(() => {
     if (!session?.session_id || session.active) return undefined
     let cancelled = false
 
-    async function load() {
+    async function loadOutcomes() {
       try {
         const res = await fetch(`${API_BASE}/presence/sessions/${session.session_id}/outcomes`, {
           headers: authHeaders(token)
@@ -112,11 +124,10 @@ export default function SessionPage() {
       }
     }
 
-    load()
+    loadOutcomes()
     return () => { cancelled = true }
-  }, [session?.session_id, session?.active, token])
+  }, [session?.session_id, session?.active, token, outcomesRefresh])
 
-  // ── Create session ────────────────────────────────────────────
   async function handleCreateSession(e) {
     e.preventDefault()
     if (!selectedCourse) { setCreateError('Please select a course.'); return }
@@ -133,7 +144,6 @@ export default function SessionPage() {
 
       setSession(data)
 
-      // Generate QR image
       const qrContent = JSON.stringify({ payload: data.qr_payload, signature: data.qr_signature })
       const url = await QRCode.toDataURL(qrContent, {
         width: 400, margin: 2,
@@ -148,7 +158,6 @@ export default function SessionPage() {
     }
   }
 
-  // ── Presence checkpoints ──────────────────────────────────────
   async function generateCheckpoint(eventType) {
     if (!session) return
     setCheckpointError('')
@@ -179,7 +188,6 @@ export default function SessionPage() {
     }
   }
 
-  // ── End session ───────────────────────────────────────────────
   async function handleEndSession() {
     if (!session) return
     setEnding(true)
@@ -204,256 +212,253 @@ export default function SessionPage() {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────
   function formatTime(secs) {
     if (secs == null) return '--:--'
     const m = Math.floor(secs / 60), s = secs % 60
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
-  const isExpired = session && timeLeft === 0
+  const isExpired = session && (session.is_expired || timeLeft === 0)
 
-  // ── Render ────────────────────────────────────────────────────
   return (
     <div className="focus-page">
-      <div className="focus-shell" style={{ maxWidth: 700 }}>
+      <div className="focus-shell">
+        <div className="toolbar">
+          <Link to="/lecturer" className="btn btn-ghost btn-sm">Back to sessions</Link>
+        </div>
 
-        {/* Back link */}
-        <Link to="/lecturer" className="btn btn-ghost btn-sm" style={{ marginBottom: '20px', display: 'inline-flex' }}>
-          ← Dashboard
-        </Link>
-
-        {/* ── No active session: create form ── */}
-        {!session && (
-          <div className="card fade-in-up">
-            <div style={{ marginBottom: '24px' }}>
-              <h2 style={{ margin: 0 }}>Start Attendance Session</h2>
-              <p className="text-secondary text-sm" style={{ marginTop: '6px' }}>
-                Select a course and duration. A signed QR code will appear for students to scan.
-              </p>
-            </div>
-
-            {createError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{createError}</div>}
-
-            <form onSubmit={handleCreateSession} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="course-select">Course</label>
-                {courses.length > 0 ? (
-                  <select
-                    id="course-select"
-                    className="form-input"
-                    value={selectedCourse}
-                    onChange={e => setSelectedCourse(e.target.value)}
-                    required
-                  >
-                    <option value="">— Select a course —</option>
-                    {courses.map(c => (
-                      <option key={c.course_code} value={c.course_code}>
-                        {c.course_code} · {c.course_title} ({c.enrolled_count} enrolled)
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="alert alert-warning">
-                    No courses found. Ask an admin to create a course and assign it to you.
-                  </div>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">
-                  Session Duration —{' '}
-                  <span style={{ color: 'var(--brand-mid)', fontWeight: 700 }}>{duration} min</span>
-                  <span className="text-muted text-xs" style={{ marginLeft: '8px', fontWeight: 400 }}>
-                    {duration <= 10 ? '(minimum window)' : duration <= 20 ? '(standard)' : duration <= 30 ? '(maximum standard)' : '(extended — special occasion)'}
-                  </span>
-                </label>
-
-                {/* Slider */}
-                <input
-                  id="duration-slider"
-                  type="range"
-                  min={extendedMode ? 10 : 10}
-                  max={extendedMode ? 120 : 30}
-                  step={5}
-                  value={duration}
-                  onChange={e => setDuration(Number(e.target.value))}
-                  style={{ width: '100%', accentColor: 'var(--accent)', cursor: 'pointer', marginTop: '8px' }}
-                />
-
-                {/* Tick labels */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  <span>10 min</span>
-                  {!extendedMode ? (
-                    <>
-                      <span>20 min</span>
-                      <span style={{ color: 'var(--warning)', fontWeight: 600 }}>30 min (max)</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>30 min</span>
-                      <span>60 min</span>
-                      <span style={{ color: 'var(--warning)', fontWeight: 600 }}>120 min (max)</span>
-                    </>
-                  )}
-                </div>
-
-                {/* Extended mode toggle */}
-                <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button
-                    id="btn-extended-mode"
-                    type="button"
-                    onClick={() => {
-                      setExtendedMode(v => !v)
-                      if (extendedMode && duration > 30) setDuration(30)
-                    }}
-                    className={`btn btn-sm ${extendedMode ? 'btn-primary' : 'btn-ghost'}`}
-                    style={{ borderColor: extendedMode ? 'var(--warning)' : undefined, color: extendedMode ? 'var(--warning)' : undefined }}
-                  >
-                    {extendedMode ? 'Extended Mode On' : 'Enable Extended Mode'}
-                  </button>
-                  <span className="text-xs text-muted">For special occasions only — requires lecturer override</span>
-                </div>
-
-                {/* Policy note */}
-                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--accent-muted)', borderRadius: 'var(--radius-md)', border: '1px solid var(--accent-border)' }}>
-                  <p className="text-xs text-muted" style={{ margin: 0 }}>
-                    <strong>Policy:</strong> Standard sessions run 10–30 minutes. Students must mark attendance within this window. Extended mode (30–120 min) is for lab sessions or special examinations.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                id="btn-start-session"
-                type="submit"
-                className="btn btn-primary"
-                disabled={creating || courses.length === 0}
-                style={{ marginTop: '8px' }}
-              >
-                {creating ? <><div className="spinner" /> Creating session…</> : 'Start Session & Generate QR'}
-              </button>
-            </form>
+        {sessionLoading && (
+          <div className="panel">
+            <div className="loading-state">Loading session...</div>
           </div>
         )}
 
-        {/* ── Active session: QR + live list ── */}
-        {session && (
-          <div className="fade-in-up" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {sessionError && !sessionLoading && (
+          <div className="panel">
+            <div className="panel-body stack">
+              <div className="alert alert-danger">{sessionError}</div>
+              <div className="form-actions">
+                <Link to="/lecturer" className="btn btn-subtle">Back to sessions</Link>
+              </div>
+            </div>
+          </div>
+        )}
 
-            {/* Session header */}
-            <div className="card" style={{ background: isExpired ? 'var(--danger-bg)' : 'var(--bg-elevated)', borderColor: isExpired ? 'var(--danger-border)' : 'var(--border-default)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                <div>
-                  <div className="badge badge-brand" style={{ marginBottom: '6px' }}>
-                    {session.course_code}
-                  </div>
-                  <h3 style={{ margin: 0 }}>
-                    {isExpired ? 'Session Expired' : (session.active ? 'Session Active' : 'Session Ended')}
-                  </h3>
-                  <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
-                    {attendance.length} student{attendance.length !== 1 ? 's' : ''} marked attendance
-                  </p>
+        {!viewingExisting && !session && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div>
+                <p className="eyebrow">Attendance</p>
+                <h3 className="panel-title">Start attendance session</h3>
+                <p className="panel-subtitle">Select a course and duration. A signed QR code will be issued when the session starts.</p>
+              </div>
+            </div>
+            <div className="panel-body stack">
+              {createError && <div className="alert alert-danger">{createError}</div>}
+
+              <form onSubmit={handleCreateSession} className="stack">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="course-select">Course</label>
+                  {courses.length > 0 ? (
+                    <select
+                      id="course-select"
+                      className="form-input"
+                      value={selectedCourse}
+                      onChange={e => setSelectedCourse(e.target.value)}
+                      required
+                    >
+                      <option value="">Select course</option>
+                      {courses.map(c => (
+                        <option key={c.course_code} value={c.course_code}>
+                          {c.course_code}: {c.course_title} ({c.enrolled_count} enrolled)
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="alert alert-warning">
+                      No courses found. Ask an admin to create a course and assign it to you.
+                    </div>
+                  )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                  {/* Timer */}
-                  <div style={{
-                    fontFamily: 'var(--font-mono)', fontSize: '28px', fontWeight: 800,
-                    color: (timeLeft ?? 999) < 60 ? 'var(--danger)' : 'var(--accent)',
-                    transition: 'color 0.5s',
-                  }}>
-                    {formatTime(timeLeft)}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="duration-slider">
+                    Session duration: <span className="text-brand font-semibold">{duration} min</span>
+                    <span className="text-muted text-xs">
+                      {' '}{duration <= 10 ? '(minimum window)' : duration <= 20 ? '(standard)' : duration <= 30 ? '(maximum standard)' : '(extended, special occasion)'}
+                    </span>
+                  </label>
+                  <input
+                    id="duration-slider"
+                    type="range"
+                    min={extendedMode ? 10 : 10}
+                    max={extendedMode ? 120 : 30}
+                    step={5}
+                    value={duration}
+                    onChange={e => setDuration(Number(e.target.value))}
+                    style={{ width: '100%' }}
+                  />
+                  <div className="inline-meta">
+                    <span>10 min</span>
+                    {!extendedMode ? (
+                      <>
+                        <span>20 min</span>
+                        <span className="text-warning font-semibold">30 min (max)</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>30 min</span>
+                        <span>60 min</span>
+                        <span className="text-warning font-semibold">120 min (max)</span>
+                      </>
+                    )}
                   </div>
+                  <div className="toolbar">
+                    <button
+                      id="btn-extended-mode"
+                      type="button"
+                      onClick={() => {
+                        setExtendedMode(v => !v)
+                        if (extendedMode && duration > 30) setDuration(30)
+                      }}
+                      className={`btn btn-sm ${extendedMode ? 'btn-primary' : 'btn-ghost'}`}
+                    >
+                      {extendedMode ? 'Extended mode on' : 'Enable extended mode'}
+                    </button>
+                    <span className="text-xs text-muted">For special occasions only. Requires a lecturer override</span>
+                  </div>
+                  <div className="alert alert-info">
+                    <p className="text-xs text-muted">
+                      <strong>Policy:</strong> Standard sessions run 10 to 30 minutes. Students must mark attendance within this window. Extended mode (30 to 120 min) is for lab sessions or special examinations.
+                    </p>
+                  </div>
+                </div>
 
+                <div className="form-actions">
+                  <button
+                    id="btn-start-session"
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={creating || courses.length === 0}
+                  >
+                    {creating ? <><div className="spinner" /> Creating session...</> : 'Start session and generate QR'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {session && (
+          <div className="stack-lg fade-in-up">
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">{session.course_code}</p>
+                  <h3 className="panel-title">{session.course_title ?? 'Attendance session'}</h3>
+                  <p className="panel-subtitle">
+                    Started at {new Date(session.started_at).toLocaleString()}. {attendance.length} student{attendance.length !== 1 ? 's' : ''} checked in
+                  </p>
+                </div>
+                <div className="toolbar-end">
+                  <span className={`chip ${isExpired ? 'chip-danger' : session.active ? 'chip-success' : ''}`}>
+                    {isExpired ? 'Expired' : session.active ? 'Active' : 'Ended'}
+                  </span>
+                  <span className="font-mono tabular">{formatTime(timeLeft)}</span>
                   {session.active && !isExpired && (
                     <button
                       id="btn-end-session"
-                      className="btn btn-sm btn-ghost"
-                      style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                      className="btn btn-sm btn-danger"
                       onClick={handleEndSession}
                       disabled={ending}
                     >
-                      {ending ? 'Ending…' : '⏹ End Session'}
+                      {ending ? 'Ending...' : 'End session'}
                     </button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* QR Code */}
-            <div className="card text-center" style={{ padding: '32px' }}>
-              <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
-                Project or display this QR code. Students scan it with their FaceAttend app.
-              </p>
-              {qrDataURL ? (
-                <div className="qr-box">
-                  <img src={qrDataURL} alt="Session QR code" width={320} height={320} />
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Student check-in</p>
+                  <h3 className="panel-title">Session QR</h3>
                 </div>
-              ) : (
-                <div className="skeleton" style={{ width: 320, height: 320, margin: '0 auto' }} />
-              )}
-              <div style={{ marginTop: '16px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                {qrDataURL && (
-                  <a
-                    href={qrDataURL}
-                    download={`session-qr-${session.session_id.slice(0,8)}.png`}
-                    className="btn btn-ghost btn-sm"
-                    id="btn-download-session-qr"
-                  >
-                    Download QR
-                  </a>
-                )}
-                <span className="btn btn-ghost btn-sm font-mono" style={{ cursor: 'default', fontSize: '11px' }}>
-                  {session.session_id.slice(0, 8)}…
-                </span>
               </div>
-
-              {/* Continuity proof: scan a midpoint QR, then a check-out QR. */}
-              <div style={{ marginTop: '20px', borderTop: '1px solid var(--border-default)', paddingTop: '16px' }}>
-                <p className="text-sm text-secondary" style={{ marginBottom: '10px' }}>
-                  Generate a short-lived QR when you want to confirm students are still in class.
-                </p>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => generateCheckpoint('checkpoint')}
-                    disabled={!session.active}
-                  >
-                    Midpoint check
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => generateCheckpoint('check_out')}
-                    disabled={!session.active}
-                  >
-                    End-of-class check-out
-                  </button>
-                </div>
-                {checkpointError && <p className="form-error">{checkpointError}</p>}
-                {checkpointQr && (
-                  <div style={{ marginTop: '14px' }}>
-                    <p className="text-sm text-muted">{checkpointQr.label} (valid 10 minutes)</p>
-                    <div className="qr-box" style={{ margin: '12px auto 0' }}>
-                      <img src={checkpointQr.url} alt={`${checkpointQr.eventType} QR code`} width={220} height={220} />
-                    </div>
+              <div className="panel-body stack">
+                {viewingExisting ? (
+                  <div className="alert alert-info stack-sm">
+                    <p>The signed QR code was issued when this session started. It cannot be regenerated from this page.</p>
+                    <p className="font-mono">Session ID: {session.session_id}</p>
                   </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted">Project this QR code so students can scan it with their FaceAttend app.</p>
+                    {qrDataURL ? (
+                      <div className="text-center">
+                        <div className="qr-box">
+                          <img src={qrDataURL} alt="Session QR code" width={320} height={320} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="loading-state">Generating QR code...</div>
+                    )}
+                    <div className="toolbar">
+                      {qrDataURL && (
+                        <a
+                          href={qrDataURL}
+                          download={`session-qr-${session.session_id.slice(0,8)}.png`}
+                          className="btn btn-ghost btn-sm"
+                          id="btn-download-session-qr"
+                        >
+                          Download QR
+                        </a>
+                      )}
+                      <span className="chip font-mono">{session.session_id.slice(0, 8)}...</span>
+                    </div>
+                  </>
                 )}
+
+                <div className="stack-sm">
+                  <p className="text-sm text-secondary">Generate a short-lived QR when you want to confirm students are still in class.</p>
+                  <div className="toolbar">
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => generateCheckpoint('checkpoint')}
+                      disabled={!session.active}
+                    >
+                      Midpoint check
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => generateCheckpoint('check_out')}
+                      disabled={!session.active}
+                    >
+                      End-of-class check-out
+                    </button>
+                  </div>
+                  {checkpointError && <p className="form-error">{checkpointError}</p>}
+                  {checkpointQr && (
+                    <div className="stack-sm">
+                      <p className="text-sm text-muted">{checkpointQr.label} (valid 10 minutes)</p>
+                      <div className="text-center">
+                        <div className="qr-box">
+                          <img src={checkpointQr.url} alt={`${checkpointQr.eventType} QR code`} width={220} height={220} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* ── Batch Scan — Primary attendance method ── */}
             {session.active && !isExpired && (
-              <div className="card" style={{
-                background: 'var(--accent-muted)',
-                borderColor: 'var(--accent-border)',
-                padding: 'var(--sp-5)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: '0 0 var(--sp-1)', color: 'var(--accent)' }}>
-                      Batch face scan
-                    </h4>
-                    <p className="text-sm" style={{ margin: 0, color: 'var(--text-secondary)' }}>
+              <div className="panel">
+                <div className="panel-body toolbar">
+                  <div className="stack-sm">
+                    <h4>Batch face scan</h4>
+                    <p className="text-sm text-secondary">
                       Point your camera at groups of up to 15 students. The system detects
                       and matches enrolled faces simultaneously.
                     </p>
@@ -462,7 +467,6 @@ export default function SessionPage() {
                     id="btn-batch-scan"
                     href={`/batch-scan/${session.session_id}/${session.course_code}`}
                     className="btn btn-primary"
-                    style={{ whiteSpace: 'nowrap', fontWeight: 700 }}
                   >
                     Open batch scanner
                   </a>
@@ -470,65 +474,46 @@ export default function SessionPage() {
               </div>
             )}
 
-            {/* Live attendance list */}
-
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px', alignItems: 'center' }}>
-                <h4 style={{ margin: 0 }}>
-                  Attendance ({attendance.length})
-                </h4>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                  <div className="sync-dot online" />
-                  Live · refreshes every 5s
+            <div className="panel">
+              <div className="panel-header">
+                <div>
+                  <p className="eyebrow">Live attendance</p>
+                  <h3 className="panel-title">Attendance ({attendance.length})</h3>
                 </div>
+                <span className="chip chip-success">
+                  <span className="sync-dot online" /> Live, refreshes every 5s
+                </span>
               </div>
-
-              {pollError && <div className="alert alert-warning text-sm" style={{ marginBottom: '12px' }}>{pollError}</div>}
-
+              {pollError && <div className="alert alert-warning">{pollError}</div>}
               {attendance.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: '14px' }}>
-                  Waiting for students to mark attendance…
+                <div className="empty-state">
+                  <span className="empty-state-label">Waiting for students</span>
+                  <p>Attendance records will appear here as students check in.</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {attendance.map((rec) => (
-                    <div key={rec.matric_number} className="record-enter" style={{
-                      display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
-                      padding: 'var(--sp-2) var(--sp-4)',
-                      borderBottom: '1px solid var(--border-subtle)',
-                    }}>
-                      <div style={{
-                        width: 26, height: 26, borderRadius: '50%',
-                        background: 'var(--accent-muted)',
-                        border: '1px solid var(--accent-border)',
-                        display: 'grid', placeItems: 'center',
-                        fontSize: 'var(--text-xs)', fontWeight: 700,
-                        color: 'var(--accent)',
-                        flexShrink: 0,
-                      }}>
-                        {rec.full_name.charAt(0)}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rec.full_name}
-                        </div>
-                        <div className="font-mono text-xs text-muted">{rec.matric_number}</div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {new Date(rec.matched_at).toLocaleTimeString()}
-                        </div>
-                        <div style={{ fontSize: '11px', color: rec.similarity_distance < 0.35 ? 'var(--success)' : 'var(--warning)' }}>
-                          d={rec.similarity_distance?.toFixed(3)}
-                        </div>
-                      </div>
-                      {rec.synced_from_client && (
-                        <div title="Synced from offline queue">
-                          <div className="sync-dot syncing" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="table-wrapper">
+                  <table className="data-table data-table--wide">
+                    <thead>
+                      <tr><th>Student</th><th>Matric number</th><th>Checked in</th><th>Match distance</th><th>Sync</th></tr>
+                    </thead>
+                    <tbody>
+                      {attendance.map(rec => (
+                        <tr key={rec.matric_number} className="record-enter">
+                          <td className="font-medium">{rec.full_name}</td>
+                          <td className="font-mono">{rec.matric_number}</td>
+                          <td className="tabular">{new Date(rec.matched_at).toLocaleTimeString()}</td>
+                          <td className={`tabular ${rec.similarity_distance < 0.35 ? 'text-success' : 'text-warning'}`}>
+                            d={rec.similarity_distance?.toFixed(3)}
+                          </td>
+                          <td>
+                            {rec.synced_from_client && (
+                              <span className="badge badge-info" title="Synced from offline queue">Synced</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -538,7 +523,7 @@ export default function SessionPage() {
                 <PresenceReviewPanel
                   session={session}
                   outcomes={outcomes}
-                  onDecision={loadOutcomes}
+                  onDecision={() => setOutcomesRefresh(n => n + 1)}
                 />
                 <ExemptionPanel session={session} />
               </>

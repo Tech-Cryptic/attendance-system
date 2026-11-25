@@ -49,7 +49,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   /**
-   * Login — POSTs credentials to /auth/login and stores the JWT.
+   * Login, POSTs credentials to /auth/login and stores the JWT.
    */
   const login = useCallback(async (email, password) => {
     const res = await fetch(`${API_BASE}/auth/login`, {
@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   /**
-   * Logout — clears token. Optionally clears local Dexie data for NDPR compliance.
+   * Logout, clears token. Optionally clears local Dexie data for NDPR compliance.
    */
   const logout = useCallback(async (clearLocalDB = false) => {
     localStorage.removeItem('fa_token')
@@ -94,7 +94,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   /**
-   * Authenticated fetch wrapper — injects Bearer token automatically.
+   * Authenticated fetch wrapper, injects Bearer token automatically.
    */
   const authFetch = useCallback(async (path, options = {}) => {
     const res = await fetch(`${API_BASE}${path}`, {

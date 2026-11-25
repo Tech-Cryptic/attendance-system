@@ -10,12 +10,12 @@ from .conftest import auth_header
 
 class TestLogin:
     def test_login_missing_fields(self, client):
-        """Login with no body → 422 validation error."""
+        """Login with no body: 422 validation error."""
         resp = client.post("/auth/login", json={})
         assert resp.status_code == 422
 
     def test_login_wrong_password(self, client):
-        """Valid email, wrong password → 401."""
+        """Valid email, wrong password: 401."""
         resp = client.post("/auth/login", json={
             "email": "nobody@unilorin.edu.ng",
             "password": "wrongpassword"
@@ -24,7 +24,7 @@ class TestLogin:
 
     def test_login_success_admin(self, client, admin_token):
         """Admin login returns a token with correct role."""
-        # admin_token fixture already logs in — just validate it's non-empty
+        # admin_token fixture already logs in: just validate it's non-empty
         assert isinstance(admin_token, str)
         assert len(admin_token) > 20
 
@@ -64,7 +64,7 @@ class TestLogin:
 
 class TestRegister:
     def test_register_requires_admin(self, client, student_token):
-        """Non-admin cannot register new users → 403."""
+        """Non-admin cannot register new users: 403."""
         resp = client.post("/auth/register",
             headers=auth_header(student_token),
             json={
@@ -77,7 +77,7 @@ class TestRegister:
         assert resp.status_code in (401, 403)
 
     def test_register_student_requires_matric(self, client, admin_token):
-        """Registering a student without linked_matric → 400."""
+        """Registering a student without linked_matric: 400."""
         resp = client.post("/auth/register",
             headers=auth_header(admin_token),
             json={
@@ -92,7 +92,7 @@ class TestRegister:
         assert "matric" in resp.json()["detail"].lower()
 
     def test_register_duplicate_email(self, client, admin_token):
-        """Registering the same email twice → 409."""
+        """Registering the same email twice: 409."""
         from .conftest import ADMIN_EMAIL
         resp = client.post("/auth/register",
             headers=auth_header(admin_token),
@@ -108,7 +108,7 @@ class TestRegister:
 
 class TestMe:
     def test_me_requires_auth(self, client):
-        """/auth/me without token → 401 or 403."""
+        """/auth/me without token: 401 or 403."""
         resp = client.get("/auth/me")
         assert resp.status_code in (401, 403)
 
@@ -123,12 +123,12 @@ class TestMe:
 
 class TestJWT:
     def test_invalid_token_rejected(self, client):
-        """Tampered JWT → 401 or 403."""
+        """Tampered JWT: 401 or 403."""
         resp = client.get("/auth/me", headers={"Authorization": "Bearer not.a.real.token"})
         assert resp.status_code in (401, 403)
 
     def test_expired_token_format(self, client):
-        """Garbage token → rejected gracefully (not 500)."""
+        """Garbage token: rejected gracefully (not 500)."""
         resp = client.get("/admin/students", headers={"Authorization": "Bearer garbage"})
         assert resp.status_code in (401, 403)
         assert resp.status_code != 500

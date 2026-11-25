@@ -15,7 +15,7 @@ from app.routes.presence import finalize_session
 
 router = APIRouter()
 
-# ── Cosine similarity (server-side verification) ──────────────
+# -- Cosine similarity (server-side verification) --------------
 def cosine_similarity(a: list, b: list) -> float:
     va, vb = np.array(a), np.array(b)
     n = np.linalg.norm(va) * np.linalg.norm(vb)
@@ -24,7 +24,7 @@ def cosine_similarity(a: list, b: list) -> float:
 MATCH_THRESHOLD = 0.60
 
 
-# ── Student: own attendance history ───────────────────────────
+# -- Student: own attendance history ---------------------------
 
 @router.get("/student/attendance")
 def get_student_attendance(actor: dict = Depends(require_roles("student", "admin"))):
@@ -69,7 +69,7 @@ def get_student_attendance(actor: dict = Depends(require_roles("student", "admin
         release_connection(conn)
 
 
-# ── Student: active fallback QR sessions ──────────────────────
+# -- Student: active fallback QR sessions ----------------------
 
 @router.get("/student/fallback-sessions")
 def get_student_fallback_sessions(actor: dict = Depends(require_roles("student"))):
@@ -120,7 +120,7 @@ def get_student_fallback_sessions(actor: dict = Depends(require_roles("student")
         release_connection(conn)
 
 
-# ── Pydantic models ───────────────────────────────────────────
+# -- Pydantic models -------------------------------------------
 
 class SessionCreate(PresencePolicyFields):
     course_code:      str
@@ -151,7 +151,7 @@ class SyncBatchRequest(BaseModel):
     client_uuid: str
 
 
-# ── Session Management ────────────────────────────────────────
+# -- Session Management ----------------------------------------
 
 @router.post("/sessions", response_model=SessionOut)
 def create_session(
@@ -307,7 +307,7 @@ def end_session(
         release_connection(conn)
 
 
-# ── Attendance Marking ────────────────────────────────────────
+# -- Attendance Marking ----------------------------------------
 
 @router.post("/attendance/mark")
 def mark_attendance(req: AttendanceMarkRequest):
@@ -384,7 +384,7 @@ def mark_attendance(req: AttendanceMarkRequest):
         matched_matric   = best_match["matric_number"]
         similarity_distance = 1.0 - best_sim
 
-        # Iris distance (supplementary — used for twin disambiguation logging)
+        # Iris distance (supplementary: used for twin disambiguation logging)
         iris_dist = None
         if req.iris_distance is not None:
             iris_dist = req.iris_distance
@@ -458,7 +458,7 @@ def sync_batch(req: SyncBatchRequest):
             "results": results}
 
 
-# ── Course Embeddings (for offline pre-caching) ───────────────
+# -- Course Embeddings (for offline pre-caching) ---------------
 
 @router.get("/courses/{course_code}/embeddings")
 def get_course_embeddings(
@@ -502,7 +502,7 @@ def get_course_embeddings(
         release_connection(conn)
 
 
-# ── Lecturer Courses ──────────────────────────────────────────
+# -- Lecturer Courses ------------------------------------------
 
 @router.get("/lecturer/courses")
 def get_lecturer_courses(actor: dict = Depends(require_roles("lecturer", "admin"))):
@@ -527,7 +527,7 @@ def get_lecturer_courses(actor: dict = Depends(require_roles("lecturer", "admin"
         release_connection(conn)
 
 
-# ── Session History ───────────────────────────────────────────
+# -- Session History -------------------------------------------
 
 @router.get("/lecturer/sessions")
 def get_lecturer_sessions(actor: dict = Depends(require_roles("lecturer", "admin"))):

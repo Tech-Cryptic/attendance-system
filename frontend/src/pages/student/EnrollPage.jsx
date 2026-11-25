@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, Fragment } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import FaceCamera from '../../components/FaceCamera'
 import NDPRConsent from '../../components/NDPRConsent'
@@ -16,21 +16,30 @@ import {
 const CAPTURE_FRAMES = 5    // number of frames to average for robust embedding
 const CAPTURE_INTERVAL_MS = 800  // wait 800ms between captures
 
-// ── Step configuration ─────────────────────────────────────────
 const STEPS = [
-  { id: 'token',    label: 'Token'    },
-  { id: 'consent',  label: 'Consent'  },
-  { id: 'liveness', label: 'Liveness' },
-  { id: 'capture',  label: 'Capture'  },
-  { id: 'success',  label: 'Complete' },
+  { id: 'details',      label: 'Details' },
+  { id: 'consent',      label: 'Consent' },
+  { id: 'face',         label: 'Face' },
+  { id: 'verification', label: 'Verification' },
+  { id: 'done',         label: 'Done' },
 ]
+
+function stepLabel(item) {
+  if (typeof item === 'number') return `Step ${item + 1}`
+  if (item && typeof item === 'object') return item.label ?? String(item.id ?? '')
+  return String(item)
+}
+
+function stepKey(item, index) {
+  if (item && typeof item === 'object') return item.id ?? index
+  return `${item}-${index}`
+}
 
 export default function EnrollPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  // ── State ──────────────────────────────────────────────────────
-  const [step, setStep] = useState(0)   // 0–4
+  const [step, setStep] = useState(0)
 
   // Step 1: Token entry
   const [matricNumber, setMatricNumber] = useState('')
@@ -42,7 +51,7 @@ export default function EnrollPage() {
   // Step 2: NDPR consent metadata
   const [consentData, setConsentData] = useState(null)
 
-  // Step 3 & 4: Liveness + capture
+  // Step 3 and step 4: Liveness and capture
   const [livenessStatus, setLivenessStatus]   = useState(null)
   const [rppgStatus,     setRppgStatus]        = useState(null)
   const [captureProgress, setCaptureProgress]  = useState(0)
@@ -51,11 +60,11 @@ export default function EnrollPage() {
   // Step 5: Submission
   const [submitting, setSubmitting]  = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [enrollResult, setEnrollResult] = useState(null) // { matric_number, qr_payload, qr_signature, high_similarity_flag }
+  const [enrollResult, setEnrollResult] = useState(null)
   const [qrDataURL, setQrDataURL]    = useState(null)
 
   const faceCamRef = useRef(null)
-  const lastDetectionRef = useRef(null)  // live reference to latest detection result
+  const lastDetectionRef = useRef(null)
 
   const [typedText, setTypedText] = useState('')
   const traceCanvasRef = useRef(null)
@@ -94,7 +103,7 @@ export default function EnrollPage() {
     if (t) setToken(t)
   }, [searchParams])
 
-  // ── Step 1: Validate token ─────────────────────────────────────
+  // Step 1: Validate token
   async function handleTokenSubmit(e) {
     e.preventDefault()
     if (!matricNumber.trim() || !fullName.trim() || !token.trim()) {
@@ -115,22 +124,22 @@ export default function EnrollPage() {
         setTokenError(data.detail ?? 'Invalid or expired token.')
         return
       }
-      setStep(1)  // → Consent
+      setStep(1)
     } catch {
-      // If backend is offline, allow proceeding — token will be validated at submission
+      // If backend is offline, allow proceeding. Token will be validated at submission
       setStep(1)
     } finally {
       setTokenLoading(false)
     }
   }
 
-  // ── Step 2: NDPR Consent accepted ─────────────────────────────
+  // Step 2: NDPR consent accepted
   function handleConsentAccepted(data) {
     setConsentData(data)
-    setStep(2)  // → Liveness
+    setStep(2)
   }
 
-  // ── Step 3: Liveness — FaceCamera callback ─────────────────────
+  // Step 3: FaceCamera callback
   const handleDetect = useCallback((result) => {
     lastDetectionRef.current = result
 
@@ -146,7 +155,7 @@ export default function EnrollPage() {
     }
   }, [step])
 
-  // ── Step 4: Capture N embeddings ──────────────────────────────
+  // Step 4: Capture embeddings
   useEffect(() => {
     if (step !== 3 || isCapturing) return
 
@@ -178,7 +187,7 @@ export default function EnrollPage() {
     runCapture()
   }, [step])
 
-  // ── Step 5: Submit enrollment ──────────────────────────────────
+  // Step 5: Submit enrollment
   async function handleSubmit(embeddings) {
     setSubmitting(true)
     setSubmitError('')
@@ -187,7 +196,7 @@ export default function EnrollPage() {
       const avgEmbedding = averageEmbeddings(embeddings)
       const embeddingArray = Array.from(avgEmbedding)
 
-      // Iris descriptor (supplementary — 25-dim)
+      // Iris descriptor (supplementary, 25-dim)
       const irisDescriptor = lastDetectionRef.current?.irisDescriptor
       const irisArray = irisDescriptor ? Array.from(irisDescriptor) : null
 
@@ -195,8 +204,8 @@ export default function EnrollPage() {
         matric_number:   matricNumber.trim(),
         full_name:       fullName.trim(),
         token:           token.trim(),
-        embedding:       embeddingArray,      // 1024-dim FaceRes
-        iris_embedding:  irisArray,           // 25-dim iris descriptor (optional)
+        embedding:       embeddingArray,
+        iris_embedding:  irisArray,
         consent_given:   true,
         consent_version: consentData?.consent_version ?? '1.0',
       }
@@ -228,9 +237,9 @@ export default function EnrollPage() {
       }
 
       if (data.high_similarity_flag) {
-        setStep(5)  // → Behavioral Biometrics Capture
+        setStep(5)
       } else {
-        setStep(4)  // → Success
+        setStep(4)
       }
     } catch (err) {
       setSubmitError(err.message)
@@ -270,7 +279,7 @@ export default function EnrollPage() {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.detail ?? 'Failed to submit behavioral biometrics')
+      if (!res.ok) throw new Error(data.detail ?? 'Failed to submit behavioural biometrics')
 
       // Proceed to enrollment complete view
       setStep(4)
@@ -285,13 +294,13 @@ export default function EnrollPage() {
     }
   }
 
-  // ── Render ─────────────────────────────────────────────────────
+  const activeIndex = step === 5 ? 3 : Math.min(step, STEPS.length - 1)
+
   return (
     <div className="focus-page">
-      <div className="focus-shell" style={{ maxWidth: 600 }}>
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px', justifyContent: 'center' }}>
-          <div className="auth-logo" style={{ margin: 0, width: 44, height: 44 }}>
+      <div className="focus-shell">
+        <div className="inline-meta">
+          <div className="auth-logo">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/>
               <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
@@ -299,94 +308,97 @@ export default function EnrollPage() {
               <line x1="15" y1="9" x2="15.01" y2="9"/>
             </svg>
           </div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '18px', color: 'var(--text-primary)' }}>FaceAttend</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Student Enrollment</div>
+          <div className="stack-sm">
+            <span className="focus-title">FaceAttend</span>
+            <span className="eyebrow">Student Enrollment</span>
           </div>
         </div>
 
-        {/* Step indicator */}
-        {step < 4 && (
-          <div className="steps" style={{ marginBottom: '32px', gap: 0 }}>
-            {STEPS.slice(0, 4).map((s, i) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                <div className={`step-item ${i === step ? 'active' : i < step ? 'done' : ''}`} style={{ flex: 1 }}>
-                  <div className="step-dot">
-                    {i < step ? '✓' : i + 1}
+        <div className="steps">
+          {STEPS.map((item, i) => {
+            const state = i === activeIndex ? 'active' : i < activeIndex ? 'done' : ''
+            return (
+              <Fragment key={stepKey(item, i)}>
+                <div className={`step-item ${state}`}>
+                  <div className="step-dot" aria-label={i < activeIndex ? 'Complete' : undefined}>
+                    {i + 1}
                   </div>
-                  <span style={{ fontSize: '11px' }}>{s.label}</span>
+                  <span>{stepLabel(item)}</span>
                 </div>
-                {i < 3 && <div className={`step-connector ${i < step ? 'done' : ''}`} style={{ height: '2px', width: '32px', flexShrink: 0 }} />}
-              </div>
-            ))}
-          </div>
-        )}
+                {i < STEPS.length - 1 && (
+                  <div className={`step-connector ${i < activeIndex ? 'done' : ''}`} />
+                )}
+              </Fragment>
+            )
+          })}
+        </div>
 
-        {/* ── STEP 1: Token Entry ─── */}
         {step === 0 && (
-          <div className="card fade-in-up">
-            <h3 style={{ marginBottom: '8px' }}>Enter your enrollment details</h3>
-            <p className="text-secondary text-sm" style={{ marginBottom: '24px' }}>
-              Use the enrollment token provided by your lecturer.
-            </p>
-
-            {tokenError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{tokenError}</div>}
-
-            <form onSubmit={handleTokenSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="matric">Matric Number</label>
-                <input
-                  id="matric"
-                  type="text"
-                  className="form-input font-mono"
-                  placeholder="e.g. 22/01DL068"
-                  value={matricNumber}
-                  onChange={e => setMatricNumber(e.target.value)}
-                  required
-                />
+          <div className="focus-card fade-in-up">
+            <div className="focus-header">
+              <div className="stack-sm">
+                <p className="eyebrow">Student enrollment</p>
+                <h3 className="panel-title">Enter your enrollment details</h3>
+                <p className="focus-subtitle">Use the enrollment token provided by your lecturer.</p>
               </div>
+            </div>
+            <div className="stack">
+              {tokenError && <div className="alert alert-danger">{tokenError}</div>}
+              <form onSubmit={handleTokenSubmit} className="stack">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="matric">Matric number</label>
+                  <input
+                    id="matric"
+                    type="text"
+                    className="form-input font-mono"
+                    placeholder="e.g. 22/01DL068"
+                    value={matricNumber}
+                    onChange={e => setMatricNumber(e.target.value)}
+                    required
+                  />
+                </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="fullname">Full Name</label>
-                <input
-                  id="fullname"
-                  type="text"
-                  className="form-input"
-                  placeholder="As on your student ID"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  required
-                />
-              </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="fullname">Full name</label>
+                  <input
+                    id="fullname"
+                    type="text"
+                    className="form-input"
+                    placeholder="As on your student ID"
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    required
+                  />
+                </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="token">Enrollment Token</label>
-                <input
-                  id="token"
-                  type="text"
-                  className="form-input font-mono"
-                  placeholder="Paste token from your lecturer"
-                  value={token}
-                  onChange={e => setToken(e.target.value)}
-                  required
-                  spellCheck="false"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                />
-              </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="token">Enrollment token</label>
+                  <input
+                    id="token"
+                    type="text"
+                    className="form-input font-mono"
+                    placeholder="Paste token from your lecturer"
+                    value={token}
+                    onChange={e => setToken(e.target.value)}
+                    required
+                    spellCheck="false"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                  />
+                </div>
 
-              <button id="btn-token-continue" type="submit" className="btn btn-primary btn-full" disabled={tokenLoading} style={{ marginTop: '8px' }}>
-                {tokenLoading ? <><div className="spinner" /> Validating…</> : 'Continue →'}
-              </button>
-            </form>
+                <button id="btn-token-continue" type="submit" className="btn btn-primary btn-full" disabled={tokenLoading}>
+                  {tokenLoading ? <span className="loading-state"><span className="spinner" /> Validating...</span> : 'Continue'}
+                </button>
+              </form>
 
-            <p className="text-xs text-muted text-center" style={{ marginTop: '20px' }}>
-              No token? Contact your lecturer to issue one for your matric number.
-            </p>
+              <p className="text-muted text-sm">
+                No token? Contact your lecturer to issue one for your matric number.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* ── STEP 2: NDPR Consent Modal ─── */}
         {step === 1 && (
           <NDPRConsent
             onAccept={handleConsentAccepted}
@@ -394,205 +406,200 @@ export default function EnrollPage() {
           />
         )}
 
-        {/* ── STEP 3: Liveness Gate ─── */}
         {(step === 2 || step === 3) && (
-          <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <div style={{ marginBottom: '16px' }}>
-              <h3 style={{ margin: 0 }}>
-                {step === 2 ? 'Liveness Verification' : 'Capturing Biometric'}
-              </h3>
-              <p className="text-secondary text-sm" style={{ marginTop: '4px' }}>
-                {step === 2
-                  ? 'Look directly at the camera and blink naturally twice to prove you are present.'
-                  : 'Hold still while we capture your facial embedding. This takes just a moment.'}
-              </p>
-            </div>
-
-            {/* Camera */}
-            <FaceCamera
-              ref={faceCamRef}
-              mode={step === 3 ? 'enroll' : 'liveness'}
-              onDetect={handleDetect}
-              onLivenessChange={setLivenessStatus}
-              requiredBlinks={2}
-              style={{ marginBottom: '16px' }}
-            />
-
-            {/* Liveness status overlay (below camera) */}
-            {step === 2 && (
-              <div style={{ marginTop: '16px' }}>
-                <LivenessGate status={livenessStatus} rppgScore={rppgStatus?.score ?? null} />
-              </div>
-            )}
-
-            {/* Capture progress */}
-            {step === 3 && (
-              <div style={{ marginTop: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>
-                    {submitting ? 'Submitting enrollment…' : `Capturing frame ${Math.round(captureProgress * CAPTURE_FRAMES)}/${CAPTURE_FRAMES}`}
-                  </span>
-                  <span style={{ color: 'var(--brand-mid)', fontWeight: 600 }}>
-                    {submitting ? 'Uploading…' : `${Math.round(captureProgress * 100)}%`}
-                  </span>
-                </div>
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${submitting ? 100 : captureProgress * 100}%`, transition: 'width 0.5s ease' }} />
-                </div>
-                {submitError && (
-                  <div className="alert alert-danger" style={{ marginTop: '16px' }}>
-                    {submitError}
-                    <button className="btn btn-sm btn-ghost" style={{ marginLeft: '12px' }} onClick={() => { setCaptureProgress(0); setIsCapturing(false); setStep(3) }}>
-                      Retry
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Liveness retry */}
-            {step === 2 && livenessStatus?.failed && (
-              <button
-                id="btn-liveness-retry"
-                className="btn btn-ghost btn-full"
-                style={{ marginTop: '16px' }}
-                onClick={() => faceCamRef.current?.resetLiveness()}
-              >
-                Retry Liveness Check
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* ── STEP 5: Success ─── */}
-        {step === 4 && enrollResult && (
-          <div className="card fade-in-up text-center" style={{ padding: '40px 32px' }}>
-            {/* Success icon */}
-            <div style={{
-              width: 72, height: 72, borderRadius: '50%', margin: '0 auto 20px',
-              background: 'var(--success-bg)', border: '2px solid var(--success)',
-               display: 'grid', placeItems: 'center', fontSize: '32px',
-             }}>
-              ✓
-            </div>
-
-            <h2 style={{ marginBottom: '8px' }}>Enrollment Complete!</h2>
-            <p className="text-secondary" style={{ marginBottom: '8px' }}>
-              Welcome, <strong style={{ color: 'var(--text-primary)' }}>{enrollResult.full_name}</strong>
-            </p>
-            <p className="text-sm text-muted" style={{ marginBottom: '24px' }}>
-              Matric: <span className="font-mono">{enrollResult.matric_number}</span>
-            </p>
-
-            {/* Twin flag warning */}
-            {enrollResult.high_similarity_flag && (
-              <div className="alert alert-warning" style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <strong>High similarity flag:</strong> Your facial embedding closely matches another enrolled student. Your attendance will require additional behavioural verification. Please inform your lecturer.
-              </div>
-            )}
-
-            {/* QR Code */}
-            {qrDataURL ? (
-              <div style={{ marginBottom: '24px' }}>
-                <p className="text-sm text-muted" style={{ marginBottom: '16px' }}>
-                  This is your personal attendance QR code. Save it for future sessions.
+          <div className="focus-card fade-in-up">
+            <div className="focus-header">
+              <div className="stack-sm">
+                <h3 className="panel-title">
+                  {step === 2 ? 'Face verification' : 'Capturing biometric'}
+                </h3>
+                <p className="focus-subtitle">
+                  {step === 2
+                    ? 'Look directly at the camera and blink naturally twice to prove you are present.'
+                    : 'Hold still while we capture your facial embedding. This takes just a moment.'}
                 </p>
-                <div className="qr-box" style={{ display: 'inline-block' }}>
-                  <img src={qrDataURL} alt="Your enrollment QR code" width={220} height={220} />
-                </div>
-                <div style={{ marginTop: '16px' }}>
-                  <a
-                    href={qrDataURL}
-                    download={`FaceAttend-QR-${enrollResult.matric_number}.png`}
-                    className="btn btn-ghost btn-sm"
-                    id="btn-download-qr"
-                  >
-                    Download QR Code
-                  </a>
-                </div>
               </div>
-            ) : (
-              <div className="skeleton" style={{ width: 220, height: 220, margin: '0 auto 24px' }} />
-            )}
-
-            {/* NDPR notice */}
-            <div style={{
-              background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-subtle)',
-              borderRadius: '10px', padding: '12px 16px',
-              fontSize: '12px', color: 'var(--text-muted)', textAlign: 'left',
-              marginBottom: '24px',
-            }}>
-              Raw facial images are not stored or transmitted. Only a facial embedding is processed on your device.
             </div>
+            <div className="stack">
+              <FaceCamera
+                ref={faceCamRef}
+                mode={step === 3 ? 'enroll' : 'liveness'}
+                onDetect={handleDetect}
+                onLivenessChange={setLivenessStatus}
+                requiredBlinks={2}
+              />
 
-            <button id="btn-enroll-done" className="btn btn-primary btn-full" onClick={() => navigate('/login')}>
-              Proceed to Login
-            </button>
+              {step === 2 && (
+                <LivenessGate status={livenessStatus} rppgScore={rppgStatus?.score ?? null} />
+              )}
+
+              {step === 3 && (
+                <div className="stack-sm">
+                  <div className="inline-meta">
+                    <span className="text-muted">
+                      {submitting
+                        ? <span className="loading-state"><span className="spinner" /> Submitting enrollment...</span>
+                        : `Capturing frame ${Math.round(captureProgress * CAPTURE_FRAMES)}/${CAPTURE_FRAMES}`}
+                    </span>
+                    <span className="tabular">
+                      {submitting ? 'Uploading...' : `${Math.round(captureProgress * 100)}%`}
+                    </span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${submitting ? 100 : captureProgress * 100}%` }} />
+                  </div>
+                  {submitError && (
+                    <div className="alert alert-danger">
+                      <span>{submitError}</span>
+                      <button className="btn btn-sm btn-ghost" onClick={() => { setCaptureProgress(0); setIsCapturing(false); setStep(3) }}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {step === 2 && livenessStatus?.failed && (
+                <div className="form-actions">
+                  <button
+                    id="btn-liveness-retry"
+                    className="btn btn-ghost"
+                    onClick={() => faceCamRef.current?.resetLiveness()}
+                  >
+                    Retry liveness check
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* ── STEP 6: Behavioral Biometrics Capture ─── */}
-        {step === 5 && (
-          <div className="card fade-in-up" style={{ padding: '24px' }}>
-            <h3 style={{ marginBottom: '8px' }}>Behavioral Verification Setup</h3>
-            <p className="text-secondary text-sm" style={{ marginBottom: '20px' }}>
-              Your face embedding matches a look-alike student. We need to collect touch, device motion, and typing dynamics to secure your identity.
-            </p>
+        {step === 4 && enrollResult && (
+          <div className="focus-card fade-in-up">
+            <div className="stack-lg">
+              <div className="stack-sm">
+                <span className="chip chip-success">Verified</span>
+                <h2 className="focus-title">Enrollment complete</h2>
+                <p className="lead">
+                  Welcome, <strong>{enrollResult.full_name}</strong>
+                </p>
+                <p className="inline-meta">
+                  Matric: <span className="font-mono tabular">{enrollResult.matric_number}</span>
+                </p>
+              </div>
 
-            {submitError && <div className="alert alert-danger" style={{ marginBottom: '16px' }}>{submitError}</div>}
+              {enrollResult.high_similarity_flag && (
+                <div className="alert alert-warning">
+                  <strong>High similarity flag:</strong> Your facial embedding closely matches another enrolled student. Your attendance will require additional behavioural verification. Please inform your lecturer.
+                </div>
+              )}
 
-            <div className="form-group" style={{ marginBottom: '16px' }}>
-              <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>
-                1. Trace a circle inside this target box:
-              </label>
-              <div
-                ref={traceCanvasRef}
-                style={{
-                  height: 120,
-                  border: '2px dashed var(--brand-mid)',
-                  borderRadius: 12,
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: 'rgba(255,255,255,0.02)',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                  cursor: 'crosshair',
-                }}
-              >
-                <span style={{ color: 'var(--text-muted)', fontSize: '13px', pointerEvents: 'none' }}>
-                  Draw a circle or path here
-                </span>
+              {qrDataURL ? (
+                <div className="stack-sm">
+                  <p className="text-muted text-sm">
+                    This is your personal attendance QR code. Save it for future sessions.
+                  </p>
+                  <div className="qr-box">
+                    <img src={qrDataURL} alt="Your enrollment QR code" width={220} height={220} />
+                  </div>
+                  <div className="form-actions">
+                    <a
+                      href={qrDataURL}
+                      download={`FaceAttend-QR-${enrollResult.matric_number}.png`}
+                      className="btn btn-ghost btn-sm"
+                      id="btn-download-qr"
+                    >
+                      Download QR code
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <div className="loading-state"><span className="spinner" /> Preparing QR code...</div>
+              )}
+
+              <div className="alert alert-info">
+                Raw facial images are not stored or transmitted. Only a facial embedding is processed on your device.
+              </div>
+
+              <div className="form-actions">
+                <button id="btn-enroll-done" className="btn btn-primary btn-full" onClick={() => navigate('/login')}>
+                  Proceed to login
+                </button>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="form-group" style={{ marginBottom: '24px' }}>
-              <label className="form-label" htmlFor="behavioural-typing">
-                2. Type your matriculation number ({matricNumber}):
-              </label>
-              <input
-                ref={typingInputRef}
-                id="behavioural-typing"
-                type="text"
-                className="form-input font-mono"
-                placeholder="Type your matriculation number here..."
-                value={typedText}
-                onChange={e => setTypedText(e.target.value)}
-                required
-                spellCheck="false"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-              />
+        {step === 5 && (
+          <div className="panel fade-in-up">
+            <div className="panel-header">
+              <div className="stack-sm">
+                <p className="eyebrow">Additional identity check</p>
+                <h3 className="panel-title">Behavioural verification</h3>
+                <p className="panel-subtitle">
+                  Your face embedding matches a look-alike student. We need to collect touch, device motion, and typing dynamics to secure your identity.
+                </p>
+              </div>
             </div>
+            <div className="panel-body stack">
+              {submitError && <div className="alert alert-danger">{submitError}</div>}
+              <div className="field-grid">
+                <div className="form-group field-full">
+                  <label className="form-label">Trace a circle inside the target box</label>
+                  <div
+                    ref={traceCanvasRef}
+                    aria-label="Trace a circle or path inside this box"
+                    role="img"
+                    style={{
+                      height: 120,
+                      border: '2px dashed var(--accent)',
+                      borderRadius: 12,
+                      display: 'grid',
+                      placeItems: 'center',
+                      background: 'rgba(255,255,255,0.02)',
+                      userSelect: 'none',
+                      touchAction: 'none',
+                      cursor: 'crosshair',
+                    }}
+                  >
+                    <span className="text-muted" style={{ pointerEvents: 'none' }}>
+                      Draw a circle or path here
+                    </span>
+                  </div>
+                </div>
 
-            <button
-              id="btn-behavioural-submit"
-              className="btn btn-primary btn-full"
-              disabled={submitting}
-              onClick={handleBehaviouralSubmit}
-            >
-              {submitting ? <><div className="spinner" /> Saving…</> : 'Register Behavioral Biometrics →'}
-            </button>
+                <div className="form-group field-full">
+                  <label className="form-label" htmlFor="behavioural-typing">Type your matriculation number</label>
+                  <input
+                    ref={typingInputRef}
+                    id="behavioural-typing"
+                    type="text"
+                    className="form-input font-mono"
+                    placeholder="Type your matriculation number here..."
+                    value={typedText}
+                    onChange={e => setTypedText(e.target.value)}
+                    required
+                    spellCheck="false"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                  />
+                  <p className="inline-meta">
+                    Matric: <span className="font-mono tabular">{matricNumber}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="panel-footer">
+              <button
+                id="btn-behavioural-submit"
+                className="btn btn-primary"
+                disabled={submitting}
+                onClick={handleBehaviouralSubmit}
+              >
+                {submitting ? <span className="loading-state"><span className="spinner" /> Saving...</span> : 'Register behavioural biometrics'}
+              </button>
+            </div>
           </div>
         )}
       </div>

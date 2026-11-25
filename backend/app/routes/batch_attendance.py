@@ -1,5 +1,5 @@
 """
-Batch attendance endpoints — lecturer-operated proximity batch scan.
+Batch attendance endpoints: lecturer-operated proximity batch scan.
 
 POST /attendance/batch
   • Accepts a list of matched face records from the BatchScanPage
@@ -33,7 +33,7 @@ router = APIRouter(prefix="/attendance", tags=["attendance"])
 FALLBACK_WINDOW_MINUTES = 15   # fallback QR valid for 15 minutes after release
 
 
-# ── Schemas ───────────────────────────────────────────────────
+# -- Schemas ---------------------------------------------------
 
 class BatchFaceRecord(BaseModel):
     matric_number: str
@@ -58,7 +58,7 @@ class FallbackClaimRequest(BaseModel):
     matric_number: str
 
 
-# ── Batch face attendance ─────────────────────────────────────
+# -- Batch face attendance -------------------------------------
 
 @router.post("/batch")
 def submit_batch_attendance(
@@ -104,7 +104,7 @@ def submit_batch_attendance(
                 skipped.append({"matric_number": rec.matric_number, "reason": "not enrolled in course"})
                 continue
 
-            # Insert — skip if already marked (UNIQUE constraint)
+            # Insert: skip if already marked (UNIQUE constraint)
             try:
                 cur.execute(
                     """INSERT INTO attendance_records
@@ -155,7 +155,7 @@ def submit_batch_attendance(
         release_connection(conn)
 
 
-# ── Fallback QR release ───────────────────────────────────────
+# -- Fallback QR release ---------------------------------------
 
 @router.post("/fallback-release")
 def release_fallback_qr(
@@ -212,7 +212,7 @@ def release_fallback_qr(
         release_connection(conn)
 
 
-# ── Fallback QR claim ─────────────────────────────────────────
+# -- Fallback QR claim -----------------------------------------
 
 @router.post("/fallback-claim")
 def claim_fallback_attendance(
@@ -289,7 +289,7 @@ def claim_fallback_attendance(
         release_connection(conn)
 
 
-# ── Session status (matched vs. unmatched) ───────────────────
+# -- Session status (matched vs. unmatched) -------------------
 
 @router.get("/session/{session_id}/status")
 def get_session_status(

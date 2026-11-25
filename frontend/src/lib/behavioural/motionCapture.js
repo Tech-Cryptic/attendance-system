@@ -1,16 +1,16 @@
 /**
- * Behavioural Biometrics — Multi-modal Branch for Twin Disambiguation
+ * Behavioural Biometrics, Multi-modal Branch for Twin Disambiguation
  *
  * Addresses Section 3.5.3 of the methodology:
  * When two enrolled students have cosine similarity < 0.30 (high_similarity_flag),
  * the system triggers a 30-second behavioural profiling session to collect:
  *
- * Channel 1 — Micro-Tremor (DeviceMotion API):
+ * Channel 1, Micro-Tremor (DeviceMotion API):
  *   Captures linear acceleration from the IMU sensor at ~60Hz.
  *   The micro-tremor profile (involuntary hand movement) is unique per individual.
  *   Features: RMS acceleration, dominant frequency band, variance per axis.
  *
- * Channel 2 — Touch Velocity Vector (Pointer Events):
+ * Channel 2, Touch Velocity Vector (Pointer Events):
  *   Records touch/drag velocity, pressure (if available), and trajectory
  *   when the user is asked to trace a simple on-screen pattern.
  *   Features: mean velocity, acceleration, curvature, pressure signature.
@@ -19,7 +19,7 @@
  * and is matched using a simple nearest-neighbour comparison at attendance time.
  */
 
-// ── DeviceMotion Capture ───────────────────────────────────────
+// -- DeviceMotion Capture ---------------------------------------
 
 export class MotionCapturer {
   constructor() {
@@ -121,7 +121,7 @@ export class MotionCapturer {
   }
 }
 
-// ── Touch Velocity Capture ─────────────────────────────────────
+// -- Touch Velocity Capture -------------------------------------
 
 export class TouchVectorCapturer {
   constructor() {
@@ -235,7 +235,7 @@ export class TouchVectorCapturer {
   }
 }
 
-// ── Keystroke dynamics capture ────────────────────────────────
+// -- Keystroke dynamics capture --------------------------------
 export class KeystrokeCapturer {
   constructor() {
     this.keyEvents = []
@@ -321,7 +321,7 @@ export class KeystrokeCapturer {
   }
 }
 
-// ── Combined Behavioural Profile Builder ──────────────────────
+// -- Combined Behavioural Profile Builder ----------------------
 
 /**
  * Build a compact behavioural profile from motion + touch + keystroke data.
@@ -341,7 +341,7 @@ export function buildBehaviouralProfile(motionFeatures, touchFeatures, keystroke
 
 /**
  * Compare two behavioural profiles.
- * Returns similarity score 0–1 (higher = more similar = same person).
+ * Returns similarity score 0 to 1 (higher = more similar = same person).
  */
 export function compareBehaviouralProfiles(profileA, profileB) {
   if (!profileA || !profileB) return 0.5  // neutral

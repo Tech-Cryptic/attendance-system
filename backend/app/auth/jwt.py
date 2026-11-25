@@ -34,12 +34,12 @@ def decode_token(token: str) -> dict:
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 ) -> dict:
-    """FastAPI dependency — extracts and validates the JWT from the Authorization header."""
+    """FastAPI dependency: extracts and validates the JWT from the Authorization header."""
     return decode_token(credentials.credentials)
 
 
 def require_roles(*roles: str):
-    """FastAPI dependency factory — raises 403 if the user's role is not in `roles`."""
+    """FastAPI dependency factory: raises 403 if the user's role is not in `roles`."""
     def _check(user: dict = Depends(get_current_user)):
         if user.get("role") not in roles:
             raise HTTPException(

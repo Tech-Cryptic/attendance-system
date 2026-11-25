@@ -1,5 +1,5 @@
 """
-Admin management endpoints — /admin/*
+Admin management endpoints: /admin/*
 Requires admin role JWT on every route.
 """
 import csv
@@ -14,7 +14,7 @@ from app.auth.jwt import require_roles
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-# ── Students ─────────────────────────────────────────────────
+# -- Students -------------------------------------------------
 
 @router.get("/students")
 def list_students(actor: dict = Depends(require_roles("admin"))):
@@ -282,7 +282,7 @@ def update_course(
 
 @router.get("/lecturers")
 def list_lecturers(actor: dict = Depends(require_roles("admin"))):
-    """Return all lecturer accounts — used for course assignment dropdowns."""
+    """Return all lecturer accounts: used for course assignment dropdowns."""
     conn = get_connection()
     try:
         cur = conn.cursor()
@@ -380,7 +380,7 @@ def delete_user(
         release_connection(conn)
 
 
-# ── User check (duplicate guard) ─────────────────────────────
+# -- User check (duplicate guard) -----------------------------
 
 @router.get("/users/check")
 def check_user_exists(
@@ -412,13 +412,13 @@ def check_user_exists(
         release_connection(conn)
 
 
-# ── User edit (PATCH) ─────────────────────────────────────────
+# -- User edit (PATCH) -----------------------------------------
 
 class UserUpdate(BaseModel):
     full_name:     str | None = None
     email:         str | None = None
     linked_matric: str | None = None
-    password:      str | None = None   # optional — only patched if provided
+    password:      str | None = None   # optional: only patched if provided
 
 
 @router.patch("/users/{user_id}")
@@ -475,7 +475,7 @@ def update_user(
         release_connection(conn)
 
 
-# ── Export ────────────────────────────────────────────────────
+# -- Export ----------------------------------------------------
 
 @router.get("/export/attendance.csv")
 def export_attendance_csv(actor: dict = Depends(require_roles("admin", "lecturer"))):
@@ -561,7 +561,7 @@ def export_students_csv(actor: dict = Depends(require_roles("admin"))):
         release_connection(conn)
 
 
-# ── Admin: issue enrollment token ────────────────────────────
+# -- Admin: issue enrollment token ----------------------------
 
 class TokenRequest(BaseModel):
     course_code: str
@@ -608,7 +608,7 @@ def create_token_admin(
         release_connection(conn)
 
 
-# ── Lecturer: sessions + courses ──────────────────────────────
+# -- Lecturer: sessions + courses ------------------------------
 
 from fastapi import APIRouter as _AR
 lecturer_router = _AR(prefix="/lecturer", tags=["lecturer"])

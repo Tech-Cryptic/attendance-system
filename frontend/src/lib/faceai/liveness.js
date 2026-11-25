@@ -1,23 +1,23 @@
 /**
- * Dual-Layer Presentation Attack Detection (PAD) — ISO/IEC 30107-3 Level 2
+ * Dual-Layer Presentation Attack Detection (PAD), ISO/IEC 30107-3 Level 2
  *
- * Layer 1 — Active Liveness (EAR Blink Challenge):
+ * Layer 1, Active Liveness (EAR Blink Challenge):
  *   Eye Aspect Ratio (EAR) formula from Soukupova & Cech (2016):
- *   EAR = (||P2−P6|| + ||P3−P5||) / (2 × ||P1−P4||)
+ *   EAR = (||P2-P6|| + ||P3-P5||) / (2 * ||P1-P4||)
  *   Uses iris-precise landmark positions from @vladmandic/human.
  *   Challenge: user must blink N times within a time window.
  *
- * Layer 2 — Passive Liveness (rPPG):
+ * Layer 2, Passive Liveness (rPPG):
  *   Remote Photoplethysmography: samples the green channel mean of
  *   a cheek-patch ROI from each video frame, then applies a
- *   bandpass filter (0.8–2.5 Hz) to isolate blood volume pulse.
- *   A detectable pulse signal → real human. Absent → spoofed media.
+ *   bandpass filter (0.8 to 2.5 Hz) to isolate blood volume pulse.
+ *   A detectable pulse signal means a real human. Absence suggests spoofed media.
  *
  * Additionally uses human.js built-in antispoof + liveness model scores
  * as a third passive layer.
  */
 
-// ── Eye Aspect Ratio (EAR) ─────────────────────────────────────
+// -- Eye Aspect Ratio (EAR) -------------------------------------
 
 // Named landmark indices in human.js annotations
 // leftEye  = [p0, p1, p2, p3, p4, p5] (6 points around the eye contour)
@@ -48,7 +48,7 @@ function computeEARforEye(landmarks) {
  * Falls back to iris landmarks for more precise measurement if available.
  *
  * @param {Object} faceAnnotations - face.annotations from detectAndEmbed()
- * @returns {number} EAR value 0–1 (< 0.22 typically means eye closed)
+ * @returns {number} EAR value 0 to 1 (< 0.22 typically means eye closed)
  */
 export function computeEAR(faceAnnotations) {
   if (!faceAnnotations) return 1.0
@@ -62,10 +62,10 @@ export function computeEAR(faceAnnotations) {
   return (earLeft + earRight) / 2
 }
 
-// ── Blink Monitor ─────────────────────────────────────────────
+// -- Blink Monitor ---------------------------------------------
 
 /**
- * LivenessMonitor — stateful EAR blink counter.
+ * LivenessMonitor, stateful EAR blink counter.
  *
  * Usage:
  *   const monitor = new LivenessMonitor({ requiredBlinks: 2 })
@@ -117,12 +117,12 @@ export class LivenessMonitor {
     if (this.earHistory.length > this.HISTORY_LEN) this.earHistory.shift()
     const ear = this.earHistory.reduce((a, b) => a + b, 0) / this.earHistory.length
 
-    // State machine: open → close → open = 1 blink
+    // State machine: open to close to open = 1 blink
     if (ear < EAR_BLINK_THRESHOLD) {
       this.eyeClosedFrames++
     } else {
       if (!this.eyeWasOpen && this.eyeClosedFrames >= EAR_MIN_CLOSE_FRAMES) {
-        // Eye has just re-opened after being sufficiently closed → blink
+        // Eye has just re-opened after being sufficiently closed to blink
         this.blinkCount++
         if (this.blinkCount >= this.requiredBlinks) {
           this.passed = true
@@ -163,10 +163,10 @@ export class LivenessMonitor {
   }
 }
 
-// ── rPPG (Remote Photoplethysmography) ────────────────────────
+// -- rPPG (Remote Photoplethysmography) ------------------------
 
 /**
- * rPPGSampler — passive liveness via blood volume pulse signal.
+ * rPPGSampler, passive liveness via blood volume pulse signal.
  *
  * Algorithm:
  * 1. From each frame, sample an ROI over the left cheek patch
@@ -175,10 +175,10 @@ export class LivenessMonitor {
  *    sensitive to haemoglobin absorption changes).
  * 3. Accumulate samples at the camera frame rate (~30fps).
  * 4. Once enough samples are collected (MIN_SAMPLES), apply a
- *    discrete bandpass filter (0.8–2.5 Hz, covering resting HR
- *    40–150 bpm) using a Butterworth-approximated IIR filter.
+ *    discrete bandpass filter (0.8 to 2.5 Hz, covering resting HR
+ *    40 to 150 bpm) using a Butterworth-approximated IIR filter.
  * 5. Compute the frequency-domain power in the HR band vs total.
- *    Signal-to-noise ratio > threshold → live person confirmed.
+ *    Signal-to-noise ratio > threshold to live person confirmed.
  *
  * References: Verkruysse et al. 2008; de Haan & Jeanne 2013.
  */
@@ -194,7 +194,7 @@ export class rPPGSampler {
     this.sampleInterval = 1000 / fps
 
     // Simple IIR bandpass filter coefficients (Butterworth 2nd order)
-    // Pre-computed for 30fps, passband 0.8–2.5 Hz
+    // Pre-computed for 30fps, passband 0.8 to 2.5 Hz
     // Generated via scipy.signal.butter(2, [0.8, 2.5], fs=30, btype='band')
     this._b = [0.0562, 0, -0.1124, 0, 0.0562]
     this._a = [1, -2.8750, 3.5969, -2.3471, 0.6585]
@@ -271,7 +271,7 @@ export class rPPGSampler {
 
     // SNR-based score: higher filtered/raw ratio = stronger pulse signal
     const snr = filtPower / rawPower
-    const score = Math.min(1, snr * 8)  // scale to 0–1
+    const score = Math.min(1, snr * 8)  // scale to 0 to 1
 
     // Estimate dominant frequency via peak detection
     const bpm = this._estimateBPM(filtered)
@@ -323,13 +323,13 @@ export class rPPGSampler {
   }
 }
 
-// ── Combined PAD Decision ─────────────────────────────────────
+// -- Combined PAD Decision -------------------------------------
 
 /**
  * Final liveness decision combining all three layers:
- * 1. EAR blink challenge (active — LivenessMonitor)
- * 2. rPPG blood pulse (passive — rPPGSampler)
- * 3. human.js antispoof/liveness model scores (passive — neural net)
+ * 1. EAR blink challenge (active, LivenessMonitor)
+ * 2. rPPG blood pulse (passive, rPPGSampler)
+ * 3. human.js antispoof/liveness model scores (passive, neural net)
  *
  * @param {Object} p
  * @returns {{ isLive: boolean, confidence: number, reason: string }}

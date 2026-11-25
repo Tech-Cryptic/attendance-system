@@ -107,11 +107,11 @@ When the rule engine returns `pending_review`, a lecturer can request an advisor
 
 ```text
 pending_review outcome
-  → server builds a compact evidence payload
-  → OpenAI-compatible LLM returns strict JSON
-  → Pydantic validates the suggestion
-  → lecturer approves, overrides, or rejects
-  → attendance_outcomes changes only after the human decision
+  to server builds a compact evidence payload
+  to OpenAI-compatible LLM returns strict JSON
+  to Pydantic validates the suggestion
+  to lecturer approves, overrides, or rejects
+  to attendance_outcomes changes only after the human decision
 ```
 
 The validated response contains `recommended_status`, `confidence`, `reason_summary`, extracted `entities`, and a `draft_message`.

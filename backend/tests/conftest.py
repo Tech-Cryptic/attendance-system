@@ -15,10 +15,10 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
-# ── App import ────────────────────────────────────────────────────
+# -- App import ----------------------------------------------------
 from app.main import app
 
-# ── Test client (synchronous) ─────────────────────────────────────
+# -- Test client (synchronous) -------------------------------------
 @pytest.fixture(scope="session")
 def client():
     """Create a ASGI TestClient for the whole test session."""
@@ -26,7 +26,7 @@ def client():
         yield c
 
 
-# ── Auth helpers ──────────────────────────────────────────────────
+# -- Auth helpers --------------------------------------------------
 ADMIN_EMAIL    = os.getenv("TEST_ADMIN_EMAIL",    "admin@test.unilorin.edu.ng")
 ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "AdminPass123!")
 LECTURER_EMAIL    = os.getenv("TEST_LECTURER_EMAIL",    "lecturer@test.unilorin.edu.ng")

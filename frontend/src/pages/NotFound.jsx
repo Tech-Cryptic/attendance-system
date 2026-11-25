@@ -1,19 +1,24 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+
+const HOME_ROUTES = { admin: '/admin', lecturer: '/lecturer', student: '/student' }
 
 export default function NotFound() {
+  const { user } = useAuth()
+  const homePath = HOME_ROUTES[user?.role] ?? '/login'
+  const homeLabel = user?.role ? 'Return to dashboard' : 'Go to sign in'
+
   return (
     <div className="focus-page">
-      <div className="focus-card fade-in-up text-center">
-        <div style={{ fontSize: '56px', marginBottom: 'var(--sp-2)', fontWeight: 700, color: 'var(--accent)', letterSpacing: '-0.06em' }}>
-          404
+      <div className="focus-card fade-in-up stack">
+        <div>
+          <p className="eyebrow">404</p>
+          <h2 className="focus-title">Page not available</h2>
         </div>
-        <h2>Page Not Found</h2>
-        <p className="text-secondary" style={{ margin: '12px 0 24px' }}>
-          The page you're looking for doesn't exist or you don't have permission to view it.
-        </p>
-        <Link to="/" className="btn btn-primary">
-          Back to Dashboard
-        </Link>
+        <p className="lead">The page you requested does not exist or is outside your access.</p>
+        <div className="form-actions">
+          <Link to={homePath} className="btn btn-primary">{homeLabel}</Link>
+        </div>
       </div>
     </div>
   )

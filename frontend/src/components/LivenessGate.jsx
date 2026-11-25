@@ -1,12 +1,19 @@
+function StatusOverlay({ instruction, children }) {
+  return (
+    <div className="panel panel-body stack items-center text-center relative">
+      <span className="sr-only" aria-live="polite">{instruction}</span>
+      {children}
+    </div>
+  )
+}
+
 export default function LivenessGate({ status, rppgScore }) {
   if (!status) {
     return (
-      <div style={overlayStyle}>
+      <StatusOverlay instruction="Position your face in the camera frame">
         <div className="liveness-ring" />
-        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center' }}>
-          Position your face in the camera frame
-        </p>
-      </div>
+        <p className="text-sm text-secondary">Position your face in the camera frame</p>
+      </StatusOverlay>
     )
   }
 
@@ -15,38 +22,38 @@ export default function LivenessGate({ status, rppgScore }) {
 
   if (passed) {
     return (
-      <div style={overlayStyle}>
+      <StatusOverlay instruction="Liveness confirmed">
         <div className="liveness-ring pass">
-          <span style={{ fontSize: '28px' }}>✓</span>
+          <span className="badge badge-success">Passed</span>
         </div>
-        <p style={{ color: 'var(--success)', fontWeight: 700, fontSize: '16px' }}>Liveness confirmed</p>
+        <p className="font-semibold text-success">Liveness confirmed</p>
         {rppgScore !== null && (
-          <div className="badge badge-success" style={{ marginTop: '4px' }}>
-            Pulse detected ({rppgScore != null ? `${Math.round(rppgScore * 100)}%` : '—'})
-          </div>
+          <span className="badge badge-success">
+            Pulse detected ({rppgScore != null ? `${Math.round(rppgScore * 100)}%` : 'pending'})
+          </span>
         )}
-      </div>
+      </StatusOverlay>
     )
   }
 
   if (failed) {
     return (
-      <div style={overlayStyle}>
-        <div className="liveness-ring" style={{ borderColor: 'var(--danger)' }}>
-          <span style={{ fontSize: '28px' }}>!</span>
+      <StatusOverlay instruction="Liveness timed out. Please retry. Look at the camera and blink naturally">
+        <div className="liveness-ring">
+          <span className="badge badge-danger">Retry needed</span>
         </div>
-        <p style={{ color: 'var(--danger)', fontWeight: 700 }}>Timed out</p>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>
-          Look at the camera and blink naturally
-        </p>
-      </div>
+        <p className="font-semibold text-danger">Liveness timed out. Please retry</p>
+        <p className="text-sm text-secondary">Look at the camera and blink naturally</p>
+      </StatusOverlay>
     )
   }
 
+  const instruction = `Please blink naturally. ${blinkCount} of ${required} blinks detected. ${secondsLeft} seconds remaining.`
+
   return (
-    <div style={overlayStyle}>
-      <div style={{ position: 'relative', marginBottom: '12px' }}>
-        <svg width="112" height="112" style={{ transform: 'rotate(-90deg)' }}>
+    <StatusOverlay instruction={instruction}>
+      <div className="relative">
+        <svg width="112" height="112" viewBox="0 0 112 112" style={{ transform: 'rotate(-90deg)' }}>
           <circle cx="56" cy="56" r="48" fill="none" stroke="var(--border-default)" strokeWidth="4" />
           <circle
             cx="56" cy="56" r="48" fill="none"
@@ -58,54 +65,26 @@ export default function LivenessGate({ status, rppgScore }) {
             style={{ transition: 'stroke-dashoffset 0.2s ease' }}
           />
         </svg>
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: '2px',
-        }}>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.08em' }}>BLINK</span>
-          <span style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-            {blinkCount}/{required}
-          </span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            blinks
-          </span>
+        <div className="face-camera-overlay stack-sm items-center" style={{ justifyContent: 'center' }}>
+          <span className="eyebrow">BLINK</span>
+          <span className="text-xl font-bold tabular">{blinkCount}/{required}</span>
+          <span className="eyebrow">blinks</span>
         </div>
       </div>
 
-      <p style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '15px', textAlign: 'center', margin: '0 0 6px' }}>
-        Please blink naturally
-      </p>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', margin: '0 0 10px' }}>
-        Look directly at the camera and blink slowly
-      </p>
+      <p className="font-semibold">Please blink naturally</p>
+      <p className="text-sm text-secondary">Look directly at the camera and blink slowly</p>
 
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: '6px',
-        fontSize: '12px', color: secondsLeft < 5 ? 'var(--danger)' : 'var(--text-muted)',
-        transition: 'color 0.2s',
-      }}>
+      <div className={`inline-meta${secondsLeft < 5 ? ' text-danger' : ''}`}>
         <span>{secondsLeft}s remaining</span>
       </div>
 
       {rppgScore !== null && (
-        <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
-          <div className={`sync-dot ${rppgScore > 0.4 ? 'online' : 'syncing'}`} />
-          rPPG: {rppgScore > 0 ? `${Math.round(rppgScore * 100)}%` : 'sampling…'}
+        <div className="inline-meta">
+          <span className={`sync-dot ${rppgScore > 0.4 ? 'online' : 'syncing'}`} />
+          <span>Pulse signal: {rppgScore > 0 ? `${Math.round(rppgScore * 100)}%` : 'measuring'}</span>
         </div>
       )}
-    </div>
+    </StatusOverlay>
   )
-}
-
-const overlayStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '20px',
-  gap: '8px',
-  background: 'var(--bg-subtle)',
-  border: '1px solid var(--border-default)',
-  borderRadius: 'var(--radius-lg)',
 }

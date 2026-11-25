@@ -12,22 +12,22 @@ import pytest
 from .conftest import auth_header
 
 TEST_COURSE_CODE  = "TST999"
-TEST_COURSE_TITLE = "Test Course — Pytest"
+TEST_COURSE_TITLE = "Test Course: Pytest"
 
 
 class TestAdminStudents:
     def test_students_requires_admin(self, client, student_token):
-        """Student cannot list all students → 403."""
+        """Student cannot list all students: 403."""
         resp = client.get("/admin/students", headers=auth_header(student_token))
         assert resp.status_code == 403
 
     def test_students_requires_auth(self, client):
-        """No token → 401/403."""
+        """No token: 401/403."""
         resp = client.get("/admin/students")
         assert resp.status_code in (401, 403)
 
     def test_students_admin_ok(self, client, admin_token):
-        """Admin can list students → 200, list."""
+        """Admin can list students: 200, list."""
         resp = client.get("/admin/students", headers=auth_header(admin_token))
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
@@ -71,7 +71,7 @@ class TestAdminCourses:
             assert data["course_title"] == TEST_COURSE_TITLE
 
     def test_create_course_student_forbidden(self, client, student_token):
-        """Student cannot create a course → 403."""
+        """Student cannot create a course: 403."""
         resp = client.post("/admin/courses",
             headers=auth_header(student_token),
             json={"course_code": "BAD001", "course_title": "Bad"}
@@ -79,7 +79,7 @@ class TestAdminCourses:
         assert resp.status_code == 403
 
     def test_create_course_missing_fields(self, client, admin_token):
-        """Missing required fields → 422 validation error."""
+        """Missing required fields: 422 validation error."""
         resp = client.post("/admin/courses",
             headers=auth_header(admin_token),
             json={"course_code": "MISSING"}  # no course_title
@@ -89,7 +89,7 @@ class TestAdminCourses:
 
 class TestAdminLecturers:
     def test_lecturers_admin_only(self, client, lecturer_token):
-        """Non-admin cannot access lecturers list → 403."""
+        """Non-admin cannot access lecturers list: 403."""
         resp = client.get("/admin/lecturers", headers=auth_header(lecturer_token))
         assert resp.status_code == 403
 
@@ -102,7 +102,7 @@ class TestAdminLecturers:
 
 class TestAdminTokens:
     def test_create_token_invalid_course(self, client, admin_token):
-        """Token for non-existent course → 404."""
+        """Token for non-existent course: 404."""
         resp = client.post("/admin/tokens",
             headers=auth_header(admin_token),
             json={"course_code": "NONEXIST999", "expires_in_hours": 24}
@@ -126,7 +126,7 @@ class TestAdminTokens:
         assert len(data["token"]) > 10
 
     def test_create_token_student_forbidden(self, client, student_token):
-        """Student cannot issue tokens → 403."""
+        """Student cannot issue tokens: 403."""
         resp = client.post("/admin/tokens",
             headers=auth_header(student_token),
             json={"course_code": TEST_COURSE_CODE, "expires_in_hours": 24}
@@ -150,7 +150,7 @@ class TestExport:
         assert "text/csv" in resp.headers.get("content-type", "")
 
     def test_export_requires_auth(self, client):
-        """Export without auth → 401/403."""
+        """Export without auth: 401/403."""
         resp = client.get("/admin/export/attendance.csv")
         assert resp.status_code in (401, 403)
 

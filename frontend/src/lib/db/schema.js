@@ -1,7 +1,7 @@
 import Dexie from 'dexie'
 
 /**
- * FaceAttend Local Database — Dexie.js IndexedDB Schema
+ * FaceAttend Local Database, Dexie.js IndexedDB Schema
  *
  * Offline-first. All biometric and attendance data lives here first
  * and syncs to the backend PostgreSQL when connectivity is available.
@@ -16,7 +16,7 @@ import Dexie from 'dexie'
  */
 export const db = new Dexie('FaceAttendDB')
 
-// v1 — initial schema
+// v1, initial schema
 db.version(1).stores({
   students: 'matric_number, full_name, course_code, enrolled_at, high_similarity_flag',
   embeddings: 'matric_number, course_code',
@@ -26,13 +26,13 @@ db.version(1).stores({
   appState: 'key',
 })
 
-// v2 — add biometricStore for offline course embedding cache
+// v2, add biometricStore for offline course embedding cache
 db.version(2).stores({
   students: 'matric_number, full_name, course_code, enrolled_at, high_similarity_flag',
   embeddings: 'matric_number, course_code',
 
   /**
-   * biometricStore — downloaded course embedding cache.
+   * biometricStore, downloaded course embedding cache.
    *
    * Populated by AttendancePage from GET /courses/{code}/embeddings.
    * Each record: { matric_number, full_name, course_code, embedding[1024],
@@ -46,7 +46,7 @@ db.version(2).stores({
   sessions: 'session_id, course_code, lecturer_id, expires_at, active',
 
   /**
-   * attendanceQueue — offline-first records.
+   * attendanceQueue, offline-first records.
    *
    * Fields written by queueAttendance():
    *   session_id, qr_payload, qr_signature,
@@ -59,7 +59,7 @@ db.version(2).stores({
   appState: 'key',
 })
 
-// v3 — presence evidence queue
+// v3, presence evidence queue
 db.version(3).stores({
   students: 'matric_number, full_name, course_code, enrolled_at, high_similarity_flag',
   embeddings: 'matric_number, course_code',
@@ -67,12 +67,12 @@ db.version(3).stores({
   sessions: 'session_id, course_code, lecturer_id, expires_at, active',
 
   /**
-   * attendanceQueue — unchanged v2 biometric records.
+   * attendanceQueue, unchanged v2 biometric records.
    */
   attendanceQueue: '++id, session_id, status, createdAt, client_uuid',
 
   /**
-   * presenceQueue — off-device proof that a student stayed for a lecture.
+   * presenceQueue, off-device proof that a student stayed for a lecture.
    *
    * `event_id` is generated with crypto.randomUUID() before the device has
    * network. It is the idempotency key used by POST /presence/events, so a

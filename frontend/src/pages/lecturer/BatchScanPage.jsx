@@ -1,16 +1,3 @@
-/**
- * BatchScanPage — Lecturer-operated multi-face proximity scan
- *
- * Flow:
- *  1. Lecturer opens a live session → navigates here
- *  2. Camera activates with batchConfig (maxDetected: 15)
- *  3. Groups of students step up to the device
- *  4. System detects all faces → matches each against course embeddings
- *  5. Live overlay: green = matched, amber = uncertain, grey = unknown
- *  6. Lecturer taps "Confirm Batch" → records submitted to backend
- *  7. After all groups: "Release Fallback QR" button for unmatched students
- */
-
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { initHuman, detectAndEmbedAll, matchEmbedding } from '../../lib/faceai/detector'
@@ -21,46 +8,56 @@ import { toast } from '../../components/Toast'
 import { API_BASE } from '../../lib/api'
 
 
-
-// ── Constants ────────────────────────────────────────────────
 const SCAN_INTERVAL_MS = 800
 
 export default function BatchScanPage() {
   const { sessionId, courseCode } = useParams()
   const navigate = useNavigate()
 
-  const videoRef    = useRef(null)
-  const canvasRef   = useRef(null)
+  const videoRef = useRef(null)
+  const canvasRef = useRef(null)
   const scanTimerRef = useRef(null)
-  const humanRef    = useRef(null)
+  const humanRef = useRef(null)
 
-  // ── State ────────────────────────────────────────────────
-  const [status, setStatus]         = useState('loading')   // loading | ready | scanning | done
-  const [detectedFaces, setDetectedFaces] = useState([])    // live detected faces with match info
-  const [confirmedMatches, setConfirmedMatches] = useState([]) // accumulated across all groups
+  const [status, setStatus]           = useState('loading')
+  const [detectedFaces, setDetectedFaces] = useState([])
+  const [confirmedMatches, setConfirmedMatches] = useState([])
   const [courseEmbeddings, setCourseEmbeddings] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [sessionStatus, setSessionStatus] = useState(null)
   const [fallbackReleasing, setFallbackReleasing] = useState(false)
   const [fallbackDone, setFallbackDone] = useState(false)
 
-  // ── Init ─────────────────────────────────────────────────
+  const statusLabel = {
+    loading: 'Loading',
+    ready: 'Ready',
+    scanning: 'Scanning',
+    done: 'Complete',
+    error: 'Error',
+  }[status] ?? 'Idle'
+  const statusChipClass = status === 'scanning' || status === 'done'
+    ? 'chip chip-success'
+    : status === 'error'
+      ? 'chip chip-danger'
+      : 'chip chip-warning'
+  const statusDotClass = status === 'scanning' || status === 'done'
+    ? 'status-dot live'
+    : status === 'ready' || status === 'loading'
+      ? 'status-dot pending'
+      : 'status-dot'
+
   useEffect(() => {
     let stream = null
 
     async function init() {
       try {
-        // Load human.js with batch config
         const human = await initHuman()
-        // Apply batch config (maxDetected: 15)
         await human.load(batchConfig)
         humanRef.current = human
 
-        // Load course embeddings from IndexedDB
         const embeddings = await getEmbeddingsByCourse(courseCode)
         setCourseEmbeddings(embeddings)
 
-        // Start camera (rear-facing preferred for room scan)
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: 1280, height: 720 },
           audio: false
@@ -86,7 +83,6 @@ export default function BatchScanPage() {
     }
   }, [courseCode])
 
-  // ── Live Scan Loop ────────────────────────────────────────
   const startScanning = useCallback(() => {
     if (status !== 'ready' && status !== 'scanning') return
     setStatus('scanning')
@@ -98,7 +94,6 @@ export default function BatchScanPage() {
       try {
         const faces = await detectAndEmbedAll(videoRef.current, 0.35)
 
-        // Match each detected face against course embeddings
         const matched = faces.map(face => {
           const result = matchEmbedding(face.embedding, courseEmbeddings, 0.60)
           return {
@@ -107,7 +102,6 @@ export default function BatchScanPage() {
             faceScore:      face.faceScore,
             antispoofScore: face.antispoofScore,
             matchResult:    result,
-            // Unique key for React
             key: `${face.boxRaw?.[0]?.toFixed(2)}-${face.boxRaw?.[1]?.toFixed(2)}`,
           }
         })
@@ -129,7 +123,6 @@ export default function BatchScanPage() {
     setDetectedFaces([])
   }, [])
 
-  // ── Canvas Overlay ────────────────────────────────────────
   function drawOverlay(faces) {
     const canvas = canvasRef.current
     const video  = videoRef.current
@@ -146,17 +139,14 @@ export default function BatchScanPage() {
       if (!box) continue
       const [x, y, w, h] = box
 
-      // Colour by confidence band
       const color = matchResult.band === 'high'      ? '#166534'
                   : matchResult.band === 'uncertain' ? '#92400e'
                   : '#6b7280'
 
-      // Bounding box
       ctx.strokeStyle = color
       ctx.lineWidth   = 3
       ctx.strokeRect(x, y, w, h)
 
-      // Label
       const label = matchResult.band !== 'reject' && matchResult.match
         ? `${matchResult.match.full_name} ${Math.round(matchResult.similarity * 100)}%`
         : matchResult.band === 'uncertain' ? 'Low confidence'
@@ -164,13 +154,12 @@ export default function BatchScanPage() {
 
       ctx.fillStyle = color
       ctx.fillRect(x, y - 24, Math.min(w, label.length * 8 + 12), 24)
-      ctx.fillStyle = '#fff'
+      ctx.fillStyle = '#ffffff'
       ctx.font      = '13px Inter, sans-serif'
       ctx.fillText(label, x + 6, y - 7)
     }
   }
 
-  // ── Confirm this group ────────────────────────────────────
   function confirmGroup() {
     const toAdd = detectedFaces
       .filter(f => f.matchResult.band !== 'reject' && f.matchResult.match)
@@ -182,7 +171,6 @@ export default function BatchScanPage() {
         antispoofScore:     f.antispoofScore,
       }))
 
-    // Merge — deduplicate by matric_number
     setConfirmedMatches(prev => {
       const existing = new Set(prev.map(m => m.matric_number))
       const newOnes  = toAdd.filter(m => !existing.has(m.matric_number))
@@ -192,7 +180,6 @@ export default function BatchScanPage() {
     toast.success(`${toAdd.length} student${toAdd.length !== 1 ? 's' : ''} added to batch`)
   }
 
-  // ── Submit all to backend ─────────────────────────────────
   async function submitBatch() {
     if (confirmedMatches.length === 0) {
       toast.error('No confirmed matches to submit')
@@ -223,10 +210,13 @@ export default function BatchScanPage() {
 
       toast.success(`${data.inserted} records saved`)
 
-      // Fetch session status to show matched vs unmatched
       await refreshStatus()
+      if (scanTimerRef.current) {
+        clearInterval(scanTimerRef.current)
+        scanTimerRef.current = null
+      }
+      setDetectedFaces([])
       setStatus('done')
-      stopScanning()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -234,7 +224,6 @@ export default function BatchScanPage() {
     }
   }
 
-  // ── Refresh session status ────────────────────────────────
   async function refreshStatus() {
     try {
       const token = localStorage.getItem('fa_token')
@@ -246,7 +235,6 @@ export default function BatchScanPage() {
     } catch { setSessionStatus(null) }
   }
 
-  // ── Release fallback QR ───────────────────────────────────
   async function releaseFallback() {
     setFallbackReleasing(true)
     try {
@@ -262,7 +250,7 @@ export default function BatchScanPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Release failed')
       setFallbackDone(true)
-      toast.success(`Fallback QR active — valid for 15 minutes`)
+      toast.success(`Fallback QR active, valid for 15 minutes`)
       await refreshStatus()
     } catch (err) {
       toast.error(err.message)
@@ -271,419 +259,219 @@ export default function BatchScanPage() {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────
   return (
-    <div style={styles.page}>
-      {/* Header */}
-      <div style={styles.header}>
-        <button onClick={() => navigate(-1)} style={styles.backBtn}>← Back</button>
-        <div>
-          <h1 style={styles.title}>Batch Scan</h1>
-          <p style={styles.subtitle}>{courseCode} · Session {sessionId?.slice(0, 8)}</p>
+    <div className="min-h-screen stack-lg">
+      <header className="toolbar">
+        <button onClick={() => navigate(-1)} className="btn btn-subtle btn-sm">
+          Back to session
+        </button>
+        <div className="stack-sm">
+          <div>
+            <p className="eyebrow">Attendance</p>
+            <h1 className="panel-title">Batch Scan</h1>
+          </div>
+          <div className="inline-meta">
+            <span><strong>Course</strong> {courseCode}</span>
+            <span><strong>Session</strong> <span className="font-mono">{sessionId?.slice(0, 8)}</span></span>
+          </div>
         </div>
-        <div style={styles.scanBadge}>
-          {status === 'scanning' && <span style={styles.liveDot} />}
-          <span>{status === 'scanning' ? 'LIVE' : status.toUpperCase()}</span>
+        <div className="toolbar-end">
+          <span className={statusChipClass}>
+            <span className={statusDotClass} aria-hidden="true" />
+            {statusLabel}
+          </span>
         </div>
-      </div>
+      </header>
 
-      {/* Camera + Overlay */}
-      <div style={styles.cameraWrap}>
-        <video ref={videoRef} style={styles.video} muted playsInline />
-        <canvas ref={canvasRef} style={styles.canvas} />
+      <span className="sr-only" role="status" aria-live="polite">
+        {`${statusLabel}. ${detectedFaces.length} face${detectedFaces.length === 1 ? '' : 's'} detected.`}
+      </span>
+
+      <div className="camera-stage">
+        <video ref={videoRef} aria-label="Batch scan camera feed" muted playsInline />
+        <canvas ref={canvasRef} aria-hidden="true" />
 
         {status === 'loading' && (
-          <div style={styles.overlay}>
-            <div style={styles.spinner} />
-            <p style={{ color: '#ffffff', fontWeight: 600 }}>Loading face model…</p>
+          <div className="camera-stage-overlay">
+            <div className="camera-spinner" aria-hidden="true" />
+            <p>Loading face model...</p>
           </div>
         )}
 
         {status === 'ready' && (
-          <div style={styles.overlay}>
-            <button onClick={startScanning} style={styles.startBtn}>
+          <div className="camera-stage-overlay">
+            <button onClick={startScanning} className="btn btn-primary">
               Start Scanning
             </button>
-            <p style={{ color: '#c8d1cb', marginTop: 8 }}>
-              Direct students to step up in groups of up to 15
-            </p>
+            <p>Direct students to step up in groups of up to 15</p>
           </div>
         )}
       </div>
 
-      {/* Live detection list */}
       {status === 'scanning' && detectedFaces.length > 0 && (
-        <div style={styles.liveList}>
-          <h3 style={styles.sectionTitle}>In Frame ({detectedFaces.length})</h3>
-          <div style={styles.faceGrid}>
-            {detectedFaces.map((f, i) => {
-              const m = f.matchResult
-              const color = m.band === 'high' ? 'var(--success)'
-                          : m.band === 'uncertain' ? 'var(--warning)'
-                          : 'var(--text-muted)'
-              return (
-                <div key={i} style={{ ...styles.faceChip, borderColor: color }}>
-                  <span style={{ color, fontWeight: 700 }}>
-                    {m.band === 'reject' ? '?' : `${Math.round(m.similarity * 100)}%`}
-                  </span>
-                  <span style={styles.chipName}>
-                    {m.match ? m.match.full_name : 'Unknown'}
-                  </span>
-                </div>
-              )
-            })}
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Live detection</p>
+              <h2 className="panel-title">In frame ({detectedFaces.length})</h2>
+            </div>
+            <span className="chip chip-success">Scanning</span>
           </div>
-          <div style={styles.scanControls}>
-            <button onClick={confirmGroup} style={styles.confirmBtn}>
+          <div className="panel-body stack">
+            <div className="section-heading">
+              <div>
+                <h3>Detected faces</h3>
+                <p className="text-muted">Review matches before adding the group</p>
+              </div>
+            </div>
+            <div className="inline-meta">
+              {detectedFaces.map((f, i) => {
+                const m = f.matchResult
+                const chipClass = m.band === 'high'
+                  ? 'chip chip-success'
+                  : m.band === 'uncertain'
+                    ? 'chip chip-warning'
+                    : 'chip chip-danger'
+                return (
+                  <span key={i} className={chipClass}>
+                    <span className="font-mono tabular">
+                      {m.band === 'reject' ? 'Review' : `${Math.round(m.similarity * 100)}%`}
+                    </span>
+                    <span>{m.match ? m.match.full_name : 'Unknown'}</span>
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+          <div className="panel-footer">
+            <button onClick={confirmGroup} className="btn btn-primary">
               Add Group to Batch
             </button>
-            <button onClick={stopScanning} style={styles.stopBtn}>
+            <button onClick={stopScanning} className="btn btn-ghost">
               Stop
             </button>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Confirmed matches summary */}
       {confirmedMatches.length > 0 && (
-        <div style={styles.matchedSection}>
-          <h3 style={styles.sectionTitle}>
-            Confirmed for Submission ({confirmedMatches.length})
-          </h3>
-          <div style={styles.matchList}>
-            {confirmedMatches.map((m, i) => (
-              <div key={i} style={styles.matchRow}>
-                <span style={styles.matchName}>{m.full_name}</span>
-                <span style={{
-                  ...styles.matchBand,
-                  background: m.confidence_band === 'high' ? 'var(--success-bg)' : 'var(--warning-bg)',
-                  color:      m.confidence_band === 'high' ? 'var(--success)'   : 'var(--warning)',
-                }}>
-                  {m.confidence_band === 'high' ? 'High' : 'Uncertain'}
-                </span>
-                <span style={styles.matchDist}>
-                  {Math.round((1 - m.similarity_distance) * 100)}% match
-                </span>
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Submission queue</p>
+              <h2 className="panel-title">Confirmed for submission ({confirmedMatches.length})</h2>
+            </div>
+            <span className="badge badge-info">Pending</span>
+          </div>
+          <div className="panel-body stack">
+            <div className="section-heading">
+              <div>
+                <h3>Student matches</h3>
+                <p className="text-muted">Records included in the next submission</p>
               </div>
-            ))}
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table data-table--wide">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Confidence</th>
+                    <th>Match</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {confirmedMatches.map((m, i) => (
+                    <tr key={i}>
+                      <td>{m.full_name}</td>
+                      <td>
+                        <span className={`badge ${m.confidence_band === 'high' ? 'badge-success' : 'badge-warning'}`}>
+                          {m.confidence_band === 'high' ? 'High' : 'Uncertain'}
+                        </span>
+                      </td>
+                      <td className="font-mono tabular">
+                        {Math.round((1 - m.similarity_distance) * 100)}% match
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <button
-            onClick={submitBatch}
-            disabled={submitting}
-            style={styles.submitBtn}
-          >
-            {submitting ? 'Saving…' : `Submit ${confirmedMatches.length} Records`}
-          </button>
-        </div>
+          <div className="panel-footer">
+            <button
+              onClick={submitBatch}
+              disabled={submitting}
+              className="btn btn-primary btn-full"
+            >
+              {submitting ? 'Saving...' : `Submit ${confirmedMatches.length} Records`}
+            </button>
+          </div>
+        </section>
       )}
 
-      {/* Post-submission status */}
       {status === 'done' && sessionStatus && (
-        <div style={styles.doneSection}>
-          <h3 style={styles.sectionTitle}>Scan Complete</h3>
-          <div style={styles.statRow}>
-            <Stat label="Matched" value={sessionStatus.matched?.length ?? 0} color="var(--success)" />
-            <Stat label="Unmatched" value={sessionStatus.unmatched?.length ?? 0} color="var(--warning)" />
-            <Stat label="Total Enrolled" value={sessionStatus.total_enrolled ?? 0} color="var(--text-muted)" />
+        <section className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Session summary</p>
+              <h2 className="panel-title">Scan Complete</h2>
+            </div>
+            <span className="chip chip-success">Complete</span>
           </div>
-
-          {sessionStatus.unmatched?.length > 0 && !fallbackDone && (
-            <div style={styles.fallbackBox}>
-              <p style={styles.fallbackText}>
-                <strong>{sessionStatus.unmatched.length} enrolled students</strong> were not
-                detected in the scan. Release the fallback QR so they can mark attendance from
-                their dashboard if they are physically present.
-              </p>
-              <p style={styles.fallbackSub}>
-                Unmatched: {sessionStatus.unmatched.slice(0, 5).map(u => u.full_name).join(', ')}
-                {sessionStatus.unmatched.length > 5 ? ` +${sessionStatus.unmatched.length - 5} more` : ''}
-              </p>
-              <button
-                onClick={releaseFallback}
-                disabled={fallbackReleasing}
-                style={styles.fallbackBtn}
-              >
-                {fallbackReleasing ? 'Releasing…' : 'Release Fallback QR (15 min window)'}
-              </button>
+          <div className="panel-body stack">
+            <div className="metric-row">
+              <Stat label="Matched" value={sessionStatus.matched?.length ?? 0} />
+              <Stat label="Unmatched" value={sessionStatus.unmatched?.length ?? 0} />
+              <Stat label="Total Enrolled" value={sessionStatus.total_enrolled ?? 0} />
             </div>
-          )}
 
-          {fallbackDone && (
-            <div style={styles.fallbackSuccess}>
-              Fallback QR is live. Unmatched students can use their dashboard to mark attendance.
-              Window expires in 15 minutes.
-            </div>
-          )}
+            {sessionStatus.unmatched?.length > 0 && !fallbackDone && (
+              <div className="alert alert-warning stack-sm">
+                <p>
+                  <strong>{sessionStatus.unmatched.length} enrolled students</strong> were not
+                  detected in the scan. Release the fallback QR so they can mark attendance from
+                  their dashboard if they are physically present.
+                </p>
+                <p>
+                  Unmatched: {sessionStatus.unmatched.slice(0, 5).map(u => u.full_name).join(', ')}
+                  {sessionStatus.unmatched.length > 5 ? ` +${sessionStatus.unmatched.length - 5} more` : ''}
+                </p>
+                <button
+                  onClick={releaseFallback}
+                  disabled={fallbackReleasing}
+                  className="btn btn-primary btn-full"
+                >
+                  {fallbackReleasing ? 'Releasing...' : 'Release Fallback QR (15 min window)'}
+                </button>
+              </div>
+            )}
 
-          <button
-            onClick={() => navigate(-1)}
-            style={styles.doneBtn}
-          >
-            Return to Session
-          </button>
-        </div>
+            {fallbackDone && (
+              <div className="alert alert-success">
+                Fallback QR is live. Unmatched students can use their dashboard to mark attendance.
+                Window expires in 15 minutes.
+              </div>
+            )}
+          </div>
+          <div className="panel-footer">
+            <button
+              onClick={() => navigate(-1)}
+              className="btn btn-subtle btn-full"
+            >
+              Return to Session
+            </button>
+          </div>
+        </section>
       )}
     </div>
   )
 }
 
-// ── Sub-component ─────────────────────────────────────────────
-function Stat({ label, value, color }) {
+function Stat({ label, value }) {
   return (
-    <div style={styles.statBox}>
-      <span style={{ ...styles.statNum, color }}>{value}</span>
-      <span style={styles.statLabel}>{label}</span>
+    <div className="metric-item">
+      <span className="metric-value tabular">{value}</span>
+      <span className="metric-label">{label}</span>
     </div>
   )
-}
-
-// ── Styles ─────────────────────────────────────────────────────
-const styles = {
-  page: {
-    minHeight: '100dvh',
-    background: 'var(--bg-base)',
-    color: 'var(--text-primary)',
-    fontFamily: 'var(--font-sans)',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 16,
-    padding: '16px 20px',
-    background: 'var(--bg-surface)',
-    borderBottom: '1px solid var(--border-default)',
-  },
-  backBtn: {
-    background: 'var(--bg-subtle)',
-    border: '1px solid var(--border-default)',
-    color: 'var(--text-secondary)',
-    borderRadius: 'var(--radius-md)',
-    padding: '6px 12px',
-    cursor: 'pointer',
-    fontSize: 13,
-  },
-  title: { margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' },
-  subtitle: { margin: 0, fontSize: 12, color: 'var(--text-muted)' },
-  scanBadge: {
-    marginLeft: 'auto',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    background: 'var(--bg-subtle)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-full)',
-    padding: '4px 12px',
-    fontSize: 12,
-    fontWeight: 600,
-    color: 'var(--text-secondary)',
-  },
-  liveDot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: 'var(--success)',
-  },
-  cameraWrap: {
-    position: 'relative',
-    width: '100%',
-    aspectRatio: '16/9',
-    background: '#111714',
-    overflow: 'hidden',
-  },
-  video: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    display: 'block',
-  },
-  canvas: {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    pointerEvents: 'none',
-  },
-  overlay: {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(24, 30, 27, 0.78)',
-  },
-  spinner: {
-    width: 40,
-    height: 40,
-    border: '3px solid rgba(255,255,255,0.28)',
-    borderTop: '3px solid #ffffff',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-    marginBottom: 12,
-  },
-  startBtn: {
-    background: 'var(--accent)',
-    color: 'var(--text-inverse)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '14px 32px',
-    fontSize: 16,
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  liveList: {
-    padding: '16px 20px',
-    background: 'var(--bg-surface)',
-    borderBottom: '1px solid var(--border-default)',
-  },
-  sectionTitle: {
-    margin: '0 0 12px',
-    fontSize: 14,
-    fontWeight: 600,
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  faceGrid: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  faceChip: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '6px 12px',
-    background: 'var(--bg-surface)',
-    border: '1.5px solid',
-    borderRadius: 'var(--radius-full)',
-    fontSize: 13,
-  },
-  chipName: { color: 'var(--text-primary)', fontSize: 12 },
-  scanControls: { display: 'flex', gap: 12 },
-  confirmBtn: {
-    flex: 1,
-    background: 'var(--success)',
-    color: 'var(--text-inverse)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '12px',
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  stopBtn: {
-    background: 'var(--bg-subtle)',
-    color: 'var(--text-secondary)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-md)',
-    padding: '12px 20px',
-    fontSize: 14,
-    cursor: 'pointer',
-  },
-  matchedSection: {
-    padding: '16px 20px',
-    background: 'var(--bg-surface)',
-    borderBottom: '1px solid var(--border-default)',
-  },
-  matchList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    marginBottom: 16,
-    maxHeight: 220,
-    overflowY: 'auto',
-  },
-  matchRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '8px 12px',
-    background: 'var(--bg-subtle)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: 'var(--radius-md)',
-  },
-  matchName: { flex: 1, fontSize: 13, color: 'var(--text-primary)' },
-  matchBand: {
-    fontSize: 11,
-    fontWeight: 600,
-    padding: '2px 8px',
-    borderRadius: 'var(--radius-full)',
-  },
-  matchDist: { fontSize: 12, color: 'var(--text-muted)' },
-  submitBtn: {
-    width: '100%',
-    background: 'var(--accent)',
-    color: 'var(--text-inverse)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '14px',
-    fontSize: 15,
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  doneSection: {
-    padding: '20px',
-    background: 'var(--bg-surface)',
-  },
-  statRow: {
-    display: 'flex',
-    gap: 12,
-    marginBottom: 20,
-  },
-  statBox: {
-    flex: 1,
-    background: 'var(--bg-subtle)',
-    border: '1px solid var(--border-subtle)',
-    borderRadius: 'var(--radius-md)',
-    padding: '16px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statNum: { fontSize: 28, fontWeight: 700 },
-  statLabel: { fontSize: 12, color: 'var(--text-muted)' },
-  fallbackBox: {
-    background: 'var(--warning-bg)',
-    border: '1px solid var(--warning-border)',
-    borderRadius: 'var(--radius-md)',
-    padding: '16px',
-    marginBottom: 16,
-  },
-  fallbackText: { margin: '0 0 8px', fontSize: 14, color: 'var(--warning)' },
-  fallbackSub: { margin: '0 0 12px', fontSize: 12, color: 'var(--text-secondary)' },
-  fallbackBtn: {
-    width: '100%',
-    background: 'var(--warning)',
-    color: 'var(--text-inverse)',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '12px',
-    fontSize: 14,
-    fontWeight: 700,
-    cursor: 'pointer',
-  },
-  fallbackSuccess: {
-    background: 'var(--success-bg)',
-    border: '1px solid var(--success-border)',
-    borderRadius: 'var(--radius-md)',
-    padding: '12px 16px',
-    fontSize: 13,
-    color: 'var(--success)',
-    marginBottom: 16,
-  },
-  doneBtn: {
-    width: '100%',
-    background: 'var(--bg-subtle)',
-    color: 'var(--text-secondary)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-md)',
-    padding: '12px',
-    fontSize: 14,
-    cursor: 'pointer',
-  },
 }

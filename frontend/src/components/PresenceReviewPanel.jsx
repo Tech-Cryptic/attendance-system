@@ -4,6 +4,20 @@ import { toast } from './Toast'
 
 const STATUSES = ['present', 'left_early', 'absent', 'exempted', 'pending_review']
 
+const STATUS_LABELS = {
+  present: 'Present',
+  left_early: 'Left early',
+  absent: 'Absent',
+  exempted: 'Exempted',
+  pending_review: 'Pending review',
+}
+
+const DECISION_LABELS = {
+  approve: 'Approved',
+  override: 'Overridden',
+  reject: 'Rejected',
+}
+
 function authHeaders() {
   return {
     'Content-Type': 'application/json',
@@ -11,12 +25,6 @@ function authHeaders() {
   }
 }
 
-/**
- * PresenceReviewPanel — LLM suggestion with a human decision gate.
- *
- * The model never writes attendance_outcomes. It only produces a validated
- * suggestion and a draft message. Approve/Override/Reject is the human step.
- */
 export default function PresenceReviewPanel({ session, outcomes, onDecision }) {
   const [reviews, setReviews] = useState([])
   const [busy, setBusy] = useState({})
@@ -70,7 +78,7 @@ export default function PresenceReviewPanel({ session, outcomes, onDecision }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail ?? 'Could not generate review.')
       await loadReviews()
-      toast.success(data.fallback_used ? 'Rule-based review ready (LLM unavailable).' : 'AI review ready.')
+      toast.success(data.fallback_used ? 'Guideline-based review ready (LLM unavailable).' : 'AI review ready.')
     } catch (err) {
       setError(err.message)
       toast.error(err.message)
@@ -110,46 +118,46 @@ export default function PresenceReviewPanel({ session, outcomes, onDecision }) {
       await navigator.clipboard.writeText(message)
       toast.success('Draft message copied.')
     } catch {
-      toast.error('Copy failed — select the text manually.')
+      toast.error('Copy failed. Select the text manually.')
     }
   }
 
   const pending = outcomes.filter((o) => o.status === 'pending_review')
 
   return (
-    <div className="card">
-      <h4 style={{ margin: '0 0 var(--sp-2)' }}>AI-assisted presence review</h4>
-      <p className="text-sm text-secondary" style={{ margin: '0 0 var(--sp-4)' }}>
-        The LLM suggests an outcome and drafts a message. Nothing changes until you approve,
-        override, or reject the suggestion.
-      </p>
+    <div className="panel panel-body stack">
+      <div className="stack-sm">
+        <h4 className="panel-title">AI-assisted presence review</h4>
+        <p className="text-sm text-secondary">
+          The LLM suggests an outcome and drafts a message. Nothing changes until you approve,
+          override, or reject the suggestion.
+        </p>
+      </div>
 
-      {error && <div className="alert alert-danger" style={{ marginBottom: 'var(--sp-3)' }}>{error}</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       {pending.length === 0 && reviews.length === 0 && (
-        <p className="text-sm text-muted">No outcomes are waiting for review.</p>
+        <div className="empty-state">
+          <p>No outcomes are waiting for review.</p>
+        </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
+      <div className="stack">
         {pending.map((outcome) => {
           const review = reviews.find((r) => r.matric_number === outcome.matric_number)
           const isBusy = Boolean(busy[outcome.matric_number])
+          const fieldKey = review?.id ?? outcome.matric_number.replace(/[^a-zA-Z0-9_-]/g, '-')
+          const noteId = `review-note-${fieldKey}`
+          const overrideId = `review-override-${fieldKey}`
 
           return (
-            <div
-              key={outcome.matric_number}
-              style={{
-                border: '1px solid var(--border-default)',
-                borderRadius: 'var(--radius-md)',
-                padding: 'var(--sp-4)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-3)' }}>
-                <div>
-                  <div style={{ fontWeight: 700 }}>{outcome.full_name ?? outcome.matric_number}</div>
+            <div className="panel panel-body stack-sm" key={outcome.matric_number}>
+              <div className="section-heading">
+                <div className="stack-sm">
+                  <div className="font-semibold">{outcome.full_name ?? outcome.matric_number}</div>
                   <div className="font-mono text-xs text-muted">{outcome.matric_number}</div>
                 </div>
-                <span className="badge badge-warning">pending_review</span>
+                <span className="badge badge-warning">Pending review</span>
               </div>
 
               {!review && (
@@ -158,97 +166,109 @@ export default function PresenceReviewPanel({ session, outcomes, onDecision }) {
                   type="button"
                   onClick={() => generate(outcome.matric_number)}
                   disabled={isBusy}
-                  style={{ marginTop: 'var(--sp-3)' }}
                 >
-                  {isBusy ? 'Reviewing…' : 'Generate AI review'}
+                  {isBusy ? 'Reviewing...' : 'Generate AI review'}
                 </button>
               )}
 
               {review && (
-                <div style={{ marginTop: 'var(--sp-3)' }}>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <span className="badge badge-info">suggested: {review.recommended_status}</span>
-                    <span className="text-xs text-muted">
-                      confidence {Math.round((review.confidence ?? 0) * 100)}%
+                <div className="stack-sm">
+                  <div className="inline-meta">
+                    <span className="badge badge-info">
+                      Suggested outcome: {STATUS_LABELS[review.recommended_status] ?? 'Review'}
                     </span>
-                    {review.fallback_used && <span className="badge badge-warning">rule-based fallback</span>}
+                    <span>Confidence {Math.round((review.confidence ?? 0) * 100)}%</span>
+                    {review.fallback_used && (
+                      <span className="badge badge-warning">Guideline-based review</span>
+                    )}
                     {review.decision_action && (
-                      <span className="badge badge-success">decided: {review.decision_action}</span>
+                      <span className="badge badge-success">
+                        Decision: {DECISION_LABELS[review.decision_action] ?? 'Recorded'}
+                      </span>
                     )}
                   </div>
 
-                  <p className="text-sm" style={{ margin: 'var(--sp-3) 0' }}>{review.reason_summary}</p>
+                  <p className="text-sm">{review.reason_summary}</p>
 
                   {review.entities?.issues?.length > 0 && (
-                    <div className="text-xs text-muted" style={{ marginBottom: 'var(--sp-3)' }}>
-                      Flags: {review.entities.issues.join(' · ')}
-                      {review.entities.route_to ? ` · route: ${review.entities.route_to}` : ''}
+                    <div className="inline-meta">
+                      <span>Flags: {review.entities.issues.join(', ')}</span>
+                      {review.entities.route_to && <span>Route: {review.entities.route_to}</span>}
                     </div>
                   )}
 
-                  <div className="alert alert-info text-sm" style={{ marginBottom: 'var(--sp-3)' }}>
-                    <div style={{ fontWeight: 600, marginBottom: '6px' }}>Draft message to student</div>
+                  <div className="alert alert-info stack-sm">
+                    <div className="font-semibold">Draft message to student</div>
                     <div>{review.draft_message}</div>
                     <button
                       className="btn btn-ghost btn-sm"
                       type="button"
                       onClick={() => copyMessage(review.draft_message)}
-                      style={{ marginTop: '8px' }}
                     >
                       Copy draft
                     </button>
                   </div>
 
                   {!review.decision_action && (
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                      <input
-                        className="form-input"
-                        value={notes[review.matric_number] ?? ''}
-                        onChange={(e) => setNotes((prev) => ({ ...prev, [review.matric_number]: e.target.value }))}
-                        placeholder="Optional review note"
-                        style={{ maxWidth: '260px' }}
-                      />
-                      <select
-                        className="form-select"
-                        value={overrides[review.matric_number] ?? 'present'}
-                        onChange={(e) => setOverrides((prev) => ({ ...prev, [review.matric_number]: e.target.value }))}
-                        style={{ maxWidth: '170px' }}
-                      >
-                        {STATUSES.filter((s) => s !== 'pending_review').map((status) => (
-                          <option key={status} value={status}>{status}</option>
-                        ))}
-                      </select>
-                      <button
-                        className="btn btn-primary btn-sm"
-                        type="button"
-                        onClick={() => decide(review, 'approve')}
-                        disabled={isBusy}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        type="button"
-                        onClick={() => decide(review, 'override')}
-                        disabled={isBusy}
-                      >
-                        Override
-                      </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        type="button"
-                        onClick={() => decide(review, 'reject')}
-                        disabled={isBusy}
-                      >
-                        Reject
-                      </button>
+                    <div className="stack-sm">
+                      <div className="field-grid">
+                        <div className="form-group">
+                          <label className="form-label" htmlFor={noteId}>Review note</label>
+                          <input
+                            id={noteId}
+                            className="form-input"
+                            value={notes[review.matric_number] ?? ''}
+                            onChange={(e) => setNotes((prev) => ({ ...prev, [review.matric_number]: e.target.value }))}
+                            placeholder="Optional review note"
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label" htmlFor={overrideId}>Final status</label>
+                          <select
+                            id={overrideId}
+                            className="form-select"
+                            value={overrides[review.matric_number] ?? 'present'}
+                            onChange={(e) => setOverrides((prev) => ({ ...prev, [review.matric_number]: e.target.value }))}
+                          >
+                            {STATUSES.filter((s) => s !== 'pending_review').map((status) => (
+                              <option key={status} value={status}>{STATUS_LABELS[status]}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          className="btn btn-primary btn-sm"
+                          type="button"
+                          onClick={() => decide(review, 'approve')}
+                          disabled={isBusy}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          type="button"
+                          onClick={() => decide(review, 'override')}
+                          disabled={isBusy}
+                        >
+                          Override
+                        </button>
+                        <button
+                          className="btn btn-danger btn-sm"
+                          type="button"
+                          onClick={() => decide(review, 'reject')}
+                          disabled={isBusy}
+                        >
+                          Reject
+                        </button>
+                      </div>
                     </div>
                   )}
 
                   {review.decision_action && (
-                    <p className="text-xs text-muted" style={{ margin: 'var(--sp-3) 0 0' }}>
-                      Final decision: {review.final_status ?? 'unchanged'}
-                      {review.decision_note ? ` — ${review.decision_note}` : ''}
+                    <p className="text-xs text-muted">
+                      Final decision: {STATUS_LABELS[review.final_status] ?? 'Unchanged'}
+                      {review.decision_note ? `. Note: ${review.decision_note}` : ''}
                     </p>
                   )}
                 </div>

@@ -5,7 +5,7 @@ import { ToastContainer } from './components/Toast'
 import InstallBanner from './components/InstallBanner'
 import UpdateBanner  from './components/UpdateBanner'
 
-// ── Lazy-loaded pages (code-split for performance) ─────────────
+// Lazy-loaded pages, code-split for performance.
 const LoginPage         = lazy(() => import('./pages/auth/LoginPage'))
 const AdminDashboard    = lazy(() => import('./pages/admin/AdminDashboard'))
 const LecturerDashboard = lazy(() => import('./pages/lecturer/LecturerDashboard'))
@@ -17,16 +17,11 @@ const AttendancePage    = lazy(() => import('./pages/student/AttendancePage'))
 const ExemptionClaimPage = lazy(() => import('./pages/student/ExemptionClaimPage'))
 const NotFound          = lazy(() => import('./pages/NotFound'))
 
-// ── Page-level loading fallback ────────────────────────────────
+// Page-level loading fallback.
 function PageSpinner() {
   return (
-    <div style={{
-      minHeight: '100dvh', display: 'flex',
-      flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: '16px',
-      background: 'var(--bg-base)',
-    }}>
-      <div className="auth-logo" style={{ width: 56, height: 56, margin: 0 }}>
+    <div className="page-spinner">
+      <div className="auth-logo">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
           <path d="M8 14s1.5 2 4 2 4-2 4-2" />
@@ -34,15 +29,15 @@ function PageSpinner() {
           <line x1="15" y1="9" x2="15.01" y2="9" />
         </svg>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="page-spinner-status">
         <div className="spinner" />
-        <span className="text-secondary text-sm">Loading FaceAttend…</span>
+        <span className="text-secondary text-sm">Loading FaceAttend...</span>
       </div>
     </div>
   )
 }
 
-// ── Protected Route wrapper ─────────────────────────────────────
+// Protected route wrapper.
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()
   const location = useLocation()
@@ -57,7 +52,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   return children
 }
 
-// ── Root redirect based on role ─────────────────────────────────
+// Root redirect based on role.
 function RootRedirect() {
   const { user, loading } = useAuth()
   if (loading) return <PageSpinner />
@@ -66,7 +61,7 @@ function RootRedirect() {
   return <Navigate to={roleHome[user.role] ?? '/login'} replace />
 }
 
-// ── App Router ─────────────────────────────────────────────────
+// Application router.
 export default function App() {
   return (
     <BrowserRouter>
@@ -76,14 +71,14 @@ export default function App() {
 
         <Suspense fallback={<PageSpinner />}>
           <Routes>
-            {/* ─ Public ─ */}
+            {/* Public routes */}
             <Route path="/login"  element={<LoginPage />} />
             <Route path="/enroll" element={<EnrollPage />} />
 
-            {/* ─ Root → role-based redirect ─ */}
+            {/* Root redirect based on role */}
             <Route path="/" element={<RootRedirect />} />
 
-            {/* ─ Admin ─ */}
+            {/* Admin routes */}
             <Route path="/admin" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <AdminDashboard defaultTab="overview" />
@@ -115,7 +110,7 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            {/* ─ Lecturer ─ */}
+            {/* Lecturer routes */}
             <Route path="/lecturer" element={
               <ProtectedRoute allowedRoles={['lecturer', 'admin']}>
                 <LecturerDashboard defaultTab="overview" />
@@ -143,14 +138,14 @@ export default function App() {
                 <SessionPage />
               </ProtectedRoute>
             } />
-            {/* Batch scan — multi-face proximity scanner */}
+            {/* Batch scan, multi-face proximity scanner */}
             <Route path="/batch-scan/:sessionId/:courseCode" element={
               <ProtectedRoute allowedRoles={['lecturer', 'admin']}>
                 <BatchScanPage />
               </ProtectedRoute>
             } />
 
-            {/* ─ Student ─ */}
+            {/* Student routes */}
             <Route path="/student" element={
               <ProtectedRoute allowedRoles={['student']}>
                 <StudentDashboard />
@@ -167,7 +162,7 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            {/* ─ 404 ─ */}
+            {/* Not found */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
