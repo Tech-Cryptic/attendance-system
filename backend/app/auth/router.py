@@ -1,6 +1,6 @@
 import bcrypt
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 
 from app.db.database import get_connection, release_connection
@@ -9,15 +9,29 @@ from app.auth.jwt import create_token, require_roles
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _validate_password_bytes(value: str) -> str:
+    if len(value.encode('utf-8')) > 72:
+        raise ValueError('Password must be at most 72 bytes')
+    return value
+
+
 # -- Request / Response Models ----------------------------------
 
 class LoginRequest(BaseModel):
     email: str
     password: str
 
+    @field_validator('password')
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_password_bytes(value)
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
+
+    @field_validator('password')
+    def validate_password_bytes(cls, value: str) -> str:
+        return _validate_password_bytes(value)
     full_name: str = Field(..., max_length=200)
     role: str = Field(..., pattern="^(admin|lecturer|student)$")
     linked_matric: Optional[str] = None   # required only for student role
@@ -48,12 +62,13 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=500, detail=f"Database connection error: {str(e)}")
 
     try:
+        email = req.email.strip().lower()
         cur = conn.cursor()
         try:
             cur.execute(
                 "SELECT id, email, password_hash, role, full_name, linked_matric "
-                "FROM users WHERE email = %s",
-                (req.email,)
+                "FROM users WHERE LOWER(email) = %s",
+                (email,)
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database query error (users table check): {str(e)}")
@@ -63,11 +78,10 @@ def login(req: LoginRequest):
 
         if not row:
             import re
-            match = re.match(r"^lecturer([1-9]|[1-4][0-9]|50)@unilorin\.edu\.ng$", req.email.lower().strip())
+            match = re.match(r"^lecturer([1-9]|[1-4][0-9]|50)@unilorin\.edu\.ng$", email)
             if match and req.password == "Lecturer1234!":
                 num = match.group(1)
                 full_name = f"Lecturer {num}"
-                email = req.email.lower().strip()
                 pw_hash = hash_password(req.password)
                 
                 cur = conn.cursor()
@@ -85,7 +99,7 @@ def login(req: LoginRequest):
                     # Fallback in case of parallel insertion
                     cur.execute(
                         "SELECT id, email, password_hash, role, full_name, linked_matric "
-                        "FROM users WHERE email = %s",
+                        "FROM users WHERE LOWER(email) = %s",
                         (email,)
                     )
                     row = cur.fetchone()
@@ -130,10 +144,11 @@ def register(
 
     conn = get_connection()
     try:
+        email = str(req.email).strip().lower()
         cur = conn.cursor()
 
         # Prevent duplicate emails
-        cur.execute("SELECT id FROM users WHERE email = %s", (req.email,))
+        cur.execute("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
         if cur.fetchone():
             raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -142,13 +157,13 @@ def register(
         cur.execute(
             """INSERT INTO users (email, password_hash, role, full_name, linked_matric)
                VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (req.email, pw_hash, req.role, req.full_name, req.linked_matric)
+            (email, pw_hash, req.role, req.full_name, req.linked_matric)
         )
         new_id = cur.fetchone()[0]
         conn.commit()
         cur.close()
 
-        return {"id": new_id, "email": req.email, "role": req.role, "full_name": req.full_name}
+        return {"id": new_id, "email": email, "role": req.role, "full_name": req.full_name}
     except HTTPException:
         conn.rollback()
         raise

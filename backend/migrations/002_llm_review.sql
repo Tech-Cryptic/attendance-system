@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 002 — LLM-assisted presence review
+-- Migration 002 - LLM-assisted presence review
 -- ============================================================
 -- LLM output is advisory; lecturers approve, override, or reject it.
 

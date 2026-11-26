@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# start.sh — Render startup script (free tier compatible)
+# start.sh - Render startup script (free tier compatible)
 # Runs on every deploy. All steps are idempotent (safe to repeat).
 set -e
 
 echo ""
 echo "========================================"
-echo "  FaceAttend — Startup"
+echo "  FaceAttend - Startup"
 echo "========================================"
 
 # 1. Apply schema and seed database

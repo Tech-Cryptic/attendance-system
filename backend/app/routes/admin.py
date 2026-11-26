@@ -49,16 +49,24 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
     conn = get_connection()
     try:
         cur = conn.cursor()
+        is_admin = actor.get("role") == "admin"
+        where_sql = ""
+        params = ()
+        if not is_admin:
+            where_sql = "WHERE c.lecturer_id = %s"
+            params = (int(actor["sub"]),)
         cur.execute(
-            """SELECT c.course_code, c.course_title,
+            f"""SELECT c.course_code, c.course_title,
                       c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged,
                       u.full_name as lecturer_name,
                       COUNT(DISTINCT ce.matric_number) as enrolled_count
                FROM courses c
                LEFT JOIN users u ON u.id = c.lecturer_id
                LEFT JOIN course_enrollments ce ON ce.course_code = c.course_code
+               {where_sql}
                GROUP BY c.course_code, c.expected_count, c.enrollment_link_token, c.over_enrollment_flagged, u.full_name
-               ORDER BY c.course_code"""
+               ORDER BY c.course_code""",
+            params
         )
         rows = cur.fetchall()
         cur.close()
@@ -67,7 +75,7 @@ def list_courses(actor: dict = Depends(require_roles("admin", "lecturer"))):
                 "course_code":             r[0],
                 "course_title":            r[1],
                 "expected_count":          r[2],
-                "enrollment_link_token":   r[3],
+                "enrollment_link_token":   r[3] if is_admin else None,
                 "over_enrollment_flagged": r[4],
                 "lecturer_name":           r[5] if r[5] else "Not Assigned",
                 "enrolled_count":          r[6],

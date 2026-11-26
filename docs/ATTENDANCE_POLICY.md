@@ -18,6 +18,8 @@ The device records evidence in IndexedDB while offline. The server owns session 
 
 An outcome is one of `present`, `left_early`, `absent`, `exempted`, or `pending_review`.
 
+First-time students do not log in before enrollment. The lecturer token plus matric check authorizes onboarding; NDPR consent, face/liveness, and optional behavioural capture establish identity; the same transaction creates the student's login, so later attendance actions are authenticated.
+
 ## 3. Presence signals
 
 | Signal | Role | Limitation |
@@ -135,6 +137,7 @@ Configure with `OPENAI_API_KEY`, optional `OPENAI_MODEL`, and optional `OPENAI_B
 
 | Method | Path | Role | Purpose |
 |---|---|---|---|
+| POST | `/enroll` | public with token | Enroll biometric, create student login, consume token |
 | POST | `/presence/checkpoints` | lecturer/admin | Create signed checkpoint QR |
 | POST | `/presence/events` | student | Submit offline-safe evidence batch |
 | POST | `/presence/sessions/{id}/finalize` | lecturer/admin | Recalculate outcomes |

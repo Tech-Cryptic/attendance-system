@@ -287,7 +287,10 @@ export default function AttendancePage() {
 
       if (!referenceProfile) {
         if (navigator.onLine) {
-          const res = await fetch(`${API_BASE}/students/${matchResult.match.matric_number}/behavioural`)
+          const authToken = localStorage.getItem('fa_token')
+          const res = await fetch(`${API_BASE}/students/${matchResult.match.matric_number}/behavioural`, {
+            headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+          })
           if (res.ok) {
             const data = await res.json()
             referenceProfile = data.behavioural_profile

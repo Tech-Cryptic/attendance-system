@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 
 // -- Icons ------------------------------------------------------
@@ -47,6 +47,7 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false)
 
   const from = location.state?.from?.pathname ?? null
+  const enrollLink = location.search ? `/enroll${location.search}` : '/enroll'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -146,7 +147,10 @@ export default function LoginPage() {
         <div className="auth-note">
           <div className="divider-label">New student?</div>
           <p className="text-center text-muted">
-            Use the enrollment link sent to you by your lecturer to register your face biometric.
+            Use the enrollment link sent to you by your lecturer to register your face biometric and create your account.
+          </p>
+          <p className="text-center">
+            <Link to={enrollLink}>Start enrollment</Link>
           </p>
         </div>
 

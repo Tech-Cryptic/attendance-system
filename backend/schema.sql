@@ -1,9 +1,9 @@
 -- ============================================================
--- Offline-First AI Attendance System — PostgreSQL Schema
+-- Offline-First AI Attendance System - PostgreSQL Schema
 -- University of Ilorin
 -- ============================================================
 
--- ── Users (Admin / Lecturer / Student accounts) ─────────────
+-- -- Users (Admin / Lecturer / Student accounts) -------------
 CREATE TABLE users (
     id              SERIAL PRIMARY KEY,
     email           VARCHAR(200) UNIQUE NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE users (
     created_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- ── Courses ──────────────────────────────────────────────────
+-- -- Courses --------------------------------------------------
 CREATE TABLE courses (
     course_code                 VARCHAR(20) PRIMARY KEY,
     course_title                VARCHAR(200) NOT NULL,
@@ -27,7 +27,7 @@ CREATE TABLE courses (
     created_at                  TIMESTAMPTZ DEFAULT now()
 );
 
--- ── One-time enrollment tokens issued by admin/lecturer ──────
+-- -- One-time enrollment tokens issued by admin/lecturer ------
 -- Retained for legacy/individual token support
 CREATE TABLE enrollment_tokens (
     token           VARCHAR(64) PRIMARY KEY,
@@ -39,7 +39,7 @@ CREATE TABLE enrollment_tokens (
     expires_at      TIMESTAMPTZ
 );
 
--- ── Students ─────────────────────────────────────────────────
+-- -- Students -------------------------------------------------
 -- embedding: 1024-dim Float array produced by @vladmandic/human FaceRes model
 -- iris_embedding: 512-dim iris descriptor (human.js iris pipeline)
 -- behavioural_profile: DeviceMotion + touch vector profile for twin disambiguation
@@ -56,7 +56,7 @@ CREATE TABLE students (
     behavioural_profile     JSONB
 );
 
--- ── Course Enrolments ─────────────────────────────────────────
+-- -- Course Enrolments -----------------------------------------
 CREATE TABLE course_enrollments (
     matric_number   VARCHAR(20) REFERENCES students(matric_number),
     course_code     VARCHAR(20) REFERENCES courses(course_code),
@@ -64,7 +64,7 @@ CREATE TABLE course_enrollments (
     PRIMARY KEY (matric_number, course_code)
 );
 
--- ── Attendance Sessions (QR-gated) ───────────────────────────
+-- -- Attendance Sessions (QR-gated) ---------------------------
 CREATE TABLE sessions (
     session_id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_code         VARCHAR(20) REFERENCES courses(course_code),
@@ -85,18 +85,18 @@ CREATE TABLE sessions (
     fallback_expires_at TIMESTAMPTZ                     -- time-bound window for fallback QR
 );
 
--- ── Attendance Records ───────────────────────────────────────
+-- -- Attendance Records ---------------------------------------
 -- method: 'batch_face' | 'fallback_qr' | 'manual_override'
 -- liveness_ear_score: Eye Aspect Ratio average across blink frames
--- liveness_rppg_score: rPPG frequency-domain confidence 0–1
+-- liveness_rppg_score: rPPG frequency-domain confidence 0-1
 CREATE TABLE attendance_records (
     id                      SERIAL PRIMARY KEY,
     matric_number           VARCHAR(20) REFERENCES students(matric_number),
     session_id              UUID REFERENCES sessions(session_id),
     matched_at              TIMESTAMPTZ DEFAULT now(),
     similarity_distance     FLOAT8 NOT NULL,            -- cosine distance; lower = better match
-    liveness_ear_score      FLOAT8,                     -- EAR blink liveness 0–1
-    liveness_rppg_score     FLOAT8,                     -- rPPG liveness 0–1
+    liveness_ear_score      FLOAT8,                     -- EAR blink liveness 0-1
+    liveness_rppg_score     FLOAT8,                     -- rPPG liveness 0-1
     iris_distance           FLOAT8,                     -- iris match distance (twin disambiguation)
     method                  VARCHAR(30) DEFAULT 'batch_face',  -- batch_face | fallback_qr | manual_override
     confidence_band         VARCHAR(10),                -- 'high' | 'uncertain' | 'reject'
@@ -105,7 +105,7 @@ CREATE TABLE attendance_records (
     UNIQUE (matric_number, session_id)
 );
 
--- ── Offline Sync Log ─────────────────────────────────────────
+-- -- Offline Sync Log -----------------------------------------
 CREATE TABLE sync_log (
     id              SERIAL PRIMARY KEY,
     client_uuid     VARCHAR(64) NOT NULL,
@@ -114,8 +114,8 @@ CREATE TABLE sync_log (
     session_id      UUID REFERENCES sessions(session_id)
 );
 
--- ── Indexes ──────────────────────────────────────────────────
--- Course-scoped enrollment lookup (Section 3.5.2 — matching scoped to enrolled course only)
+-- -- Indexes --------------------------------------------------
+-- Course-scoped enrollment lookup (Section 3.5.2 - matching scoped to enrolled course only)
 CREATE INDEX idx_enrollments_course ON course_enrollments(course_code);
 -- Fast attendance query per session
 CREATE INDEX idx_attendance_session ON attendance_records(session_id);

@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 001 — Presence Evidence & Manual Exemptions
+-- Migration 001 - Presence Evidence & Manual Exemptions
 -- ============================================================
 -- Safe to re-run on every deploy; evidence is append-only and outcomes are separate.
 

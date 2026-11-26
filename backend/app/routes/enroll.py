@@ -1,7 +1,9 @@
 import numpy as np
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.auth.jwt import require_roles
+from app.auth.router import hash_password
 from app.db.database import get_connection, release_connection
 from app.models.schemas import (
     TokenCheckRequest, EnrollmentRequest, EnrollmentResponse, BehaviouralUpdateRequest
@@ -19,6 +21,39 @@ def euclidean_distance(emb1: list[float], emb2: list[float]) -> float:
     return float(np.linalg.norm(np.array(emb1) - np.array(emb2)))
 
 
+def resolve_enrollment_token(cur, token, matric_number=None, allow_used=False):
+    cur.execute(
+        "SELECT course_code, matric_number, used, expires_at FROM enrollment_tokens WHERE token = %s",
+        (token,)
+    )
+    row = cur.fetchone()
+    if row:
+        course_code, bound_matric, used, expires_at = row
+        if used and not allow_used:
+            raise HTTPException(status_code=409, detail="Token already used")
+        if expires_at and expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=403, detail="Token expired")
+        if bound_matric and matric_number and bound_matric != matric_number:
+            raise HTTPException(status_code=403, detail="Token matric number mismatch")
+        return {"course_code": course_code, "bound_matric": bound_matric, "single_use": True}
+
+    cur.execute(
+        "SELECT course_code, matric_list, enrollment_link_expires_at "
+        "FROM courses WHERE enrollment_link_token = %s",
+        (token,)
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=403, detail="Invalid enrollment token")
+
+    course_code, matric_list, expires_at = row
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=403, detail="Enrollment link expired")
+    if matric_list and matric_number and matric_number not in matric_list:
+        raise HTTPException(status_code=403, detail="Matric number is not allowed for this course")
+    return {"course_code": course_code, "bound_matric": matric_number, "single_use": False}
+
+
 @router.post("/enroll/check-token")
 def check_token(req: TokenCheckRequest):
     """
@@ -28,26 +63,22 @@ def check_token(req: TokenCheckRequest):
     conn = get_connection()
     try:
         cur = conn.cursor()
-        cur.execute(
-            "SELECT course_code, matric_number, used, expires_at FROM enrollment_tokens WHERE token = %s",
-            (req.token,)
-        )
-        row = cur.fetchone()
+        token_info = resolve_enrollment_token(cur, req.token, req.matric_number)
+
+        matric = (req.matric_number or token_info["bound_matric"] or '').strip()
+        email = str(req.email).strip().lower() if req.email else None
+
+        if email:
+            cur.execute("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Email or matric number already registered. Sign in instead.")
+        if matric:
+            cur.execute("SELECT id FROM users WHERE linked_matric = %s", (matric,))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Email or matric number already registered. Sign in instead.")
+
         cur.close()
-
-        if row is None:
-            raise HTTPException(status_code=403, detail="Invalid enrollment token")
-
-        course_code, bound_matric, used, expires_at = row
-
-        if used:
-            raise HTTPException(status_code=403, detail="Token has already been used")
-        if expires_at and expires_at < datetime.now(timezone.utc):
-            raise HTTPException(status_code=403, detail="Token has expired")
-        if bound_matric and req.matric_number and bound_matric != req.matric_number:
-            raise HTTPException(status_code=403, detail="Token is not assigned to this matric number")
-
-        return {"valid": True, "course_code": course_code}
+        return {"valid": True, "course_code": token_info["course_code"]}
     finally:
         release_connection(conn)
 
@@ -59,29 +90,25 @@ def enroll_student(req: EnrollmentRequest):
     if not req.consent_given:
         raise HTTPException(status_code=400, detail="NDPR consent is required before enrollment")
 
+    email = str(req.email).strip().lower()
+
     conn = get_connection()
     try:
         cur = conn.cursor()
 
         # 1. Validate token
-        cur.execute(
-            "SELECT course_code, matric_number, used, expires_at FROM enrollment_tokens WHERE token = %s",
-            (req.token,)
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=403, detail="Invalid enrollment token")
-
-        course_code, bound_matric, used, expires_at = row
-
-        if used:
-            raise HTTPException(status_code=403, detail="Token already used")
-        if expires_at and expires_at < datetime.now(timezone.utc):
-            raise HTTPException(status_code=403, detail="Token expired")
-        if bound_matric and bound_matric != req.matric_number:
-            raise HTTPException(status_code=403, detail="Token is not assigned to this matric number")
+        token_info = resolve_enrollment_token(cur, req.token, req.matric_number)
+        course_code = token_info["course_code"]
 
         # 2. Reject duplicate enrollment
+        cur.execute("SELECT id FROM users WHERE LOWER(email) = %s", (email,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="Email or matric number already registered. Sign in instead.")
+
+        cur.execute("SELECT id FROM users WHERE linked_matric = %s", (req.matric_number,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="Email or matric number already registered. Sign in instead.")
+
         cur.execute("SELECT matric_number FROM students WHERE matric_number = %s", (req.matric_number,))
         if cur.fetchone() is not None:
             raise HTTPException(status_code=409, detail="Student already enrolled")
@@ -99,6 +126,13 @@ def enroll_student(req: EnrollmentRequest):
 
         high_similarity_flag = flagged_with is not None
         enrolled_at = datetime.now(timezone.utc)
+        password_hash = hash_password(req.password)
+
+        cur.execute(
+            """INSERT INTO users (email, password_hash, role, full_name, linked_matric)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (email, password_hash, "student", req.full_name, req.matric_number)
+        )
 
         # 4. Insert student (with optional iris_embedding)
         cur.execute(
@@ -131,10 +165,14 @@ def enroll_student(req: EnrollmentRequest):
         )
 
         # 7. Mark token as used
-        cur.execute(
-            "UPDATE enrollment_tokens SET used = TRUE, used_at = %s WHERE token = %s",
-            (enrolled_at, req.token)
-        )
+        if token_info["single_use"]:
+            cur.execute(
+                "UPDATE enrollment_tokens SET used = TRUE, used_at = %s "
+                "WHERE token = %s AND used = FALSE",
+                (enrolled_at, req.token)
+            )
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=409, detail="Token already used")
 
         conn.commit()
         cur.close()
@@ -156,31 +194,28 @@ def enroll_student(req: EnrollmentRequest):
         raise
     except Exception as e:
         conn.rollback()
+        if getattr(e, "pgcode", None) == "23505":
+            raise HTTPException(status_code=409, detail="Email or account already registered")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         release_connection(conn)
 
 
 @router.put("/enroll/behavioural")
-def update_behavioural_profile(req: BehaviouralUpdateRequest):
+def update_behavioural_profile(
+    req: BehaviouralUpdateRequest,
+    actor: dict = Depends(require_roles("student"))
+):
     import json
     conn = get_connection()
     try:
         cur = conn.cursor()
-        
+
         # 1. Validate that student exists and token is linked/valid
-        cur.execute(
-            "SELECT course_code, matric_number, used FROM enrollment_tokens WHERE token = %s",
-            (req.token,)
-        )
-        row = cur.fetchone()
-        if row is None:
-            raise HTTPException(status_code=403, detail="Invalid enrollment token")
-            
-        course_code, bound_matric, used = row
-        if bound_matric != req.matric_number:
-            raise HTTPException(status_code=403, detail="Token matric number mismatch")
-            
+        resolve_enrollment_token(cur, req.token, req.matric_number, allow_used=True)
+        if actor.get("matric_number") != req.matric_number:
+            raise HTTPException(status_code=403, detail="Cannot update another student's behavioural profile")
+
         # 2. Update the student's behavioural profile
         profile_json = json.dumps(req.behavioural_profile)
         cur.execute(
@@ -203,8 +238,14 @@ def update_behavioural_profile(req: BehaviouralUpdateRequest):
         release_connection(conn)
 
 
-@router.get("/students/{matric_number}/behavioural")
-def get_behavioural_profile(matric_number: str):
+@router.get("/students/{matric_number:path}/behavioural")
+def get_behavioural_profile(
+    matric_number: str,
+    actor: dict = Depends(require_roles("student", "lecturer", "admin"))
+):
+    if actor.get("role") == "student" and actor.get("matric_number") != matric_number:
+        raise HTTPException(status_code=403, detail="Cannot view another student's behavioural profile")
+
     conn = get_connection()
     try:
         cur = conn.cursor()

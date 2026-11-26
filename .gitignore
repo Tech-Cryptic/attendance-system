@@ -1,6 +1,6 @@
-# FaceAttend — root .gitignore
+# FaceAttend - root .gitignore
 
-# ── OS / Editor ───────────────────────────────────────────
+# -- OS / Editor -------------------------------------------
 .DS_Store
 Thumbs.db
 .vscode/
@@ -10,7 +10,7 @@ Thumbs.db
 ~$*
 *.tmp
 
-# ── Python backend ────────────────────────────────────────
+# -- Python backend ----------------------------------------
 backend/venv/
 backend/__pycache__/
 backend/**/__pycache__/
@@ -20,7 +20,7 @@ backend/*.egg-info/
 /backend/fix_name.py
 /backend/test_admin.py
 
-# ── Node / Frontend ───────────────────────────────────────
+# -- Node / Frontend ---------------------------------------
 frontend/node_modules/
 frontend/dist/
 frontend/dev-dist/
@@ -33,14 +33,14 @@ frontend/.env.*.local
 /package.json
 /package-lock.json
 
-# ── Secrets (never commit these) ─────────────────────────
+# -- Secrets (never commit these) -------------------------
 *.pem
 *.key
 .env
 .env.local
 .env.production
 
-# ── Documents & Images (Dissertation files) ───────────────
+# -- Documents & Images (Dissertation files) ---------------
 *.docx
 *.pdf
 *.png

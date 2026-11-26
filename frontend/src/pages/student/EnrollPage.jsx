@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, Fragment } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import FaceCamera from '../../components/FaceCamera'
 import NDPRConsent from '../../components/NDPRConsent'
 import LivenessGate from '../../components/LivenessGate'
@@ -38,12 +39,15 @@ function stepKey(item, index) {
 export default function EnrollPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { login } = useAuth()
 
   const [step, setStep] = useState(0)
 
   // Step 1: Token entry
   const [matricNumber, setMatricNumber] = useState('')
   const [fullName,     setFullName]     = useState('')
+  const [email,        setEmail]        = useState('')
+  const [password,     setPassword]     = useState('')
   const [token,        setToken]        = useState(searchParams.get('token') ?? '')
   const [tokenError,   setTokenError]   = useState('')
   const [tokenLoading, setTokenLoading] = useState(false)
@@ -60,6 +64,8 @@ export default function EnrollPage() {
   // Step 5: Submission
   const [submitting, setSubmitting]  = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [loginError, setLoginError]   = useState('')
+  const [retryingLogin, setRetryingLogin] = useState(false)
   const [enrollResult, setEnrollResult] = useState(null)
   const [qrDataURL, setQrDataURL]    = useState(null)
 
@@ -106,8 +112,16 @@ export default function EnrollPage() {
   // Step 1: Validate token
   async function handleTokenSubmit(e) {
     e.preventDefault()
-    if (!matricNumber.trim() || !fullName.trim() || !token.trim()) {
+    if (!matricNumber.trim() || !fullName.trim() || !email.trim() || !token.trim()) {
       setTokenError('All fields are required.')
+      return
+    }
+    if (password.length < 8) {
+      setTokenError('Use a password of at least 8 characters.')
+      return
+    }
+    if (new TextEncoder().encode(password).length > 72) {
+      setTokenError('Use a password of at most 72 bytes.')
       return
     }
     setTokenError('')
@@ -117,7 +131,11 @@ export default function EnrollPage() {
       const res = await fetch(`${API_BASE}/enroll/check-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: token.trim(), matric_number: matricNumber.trim() }),
+        body: JSON.stringify({
+          token: token.trim(),
+          matric_number: matricNumber.trim(),
+          email: email.trim().toLowerCase(),
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -191,6 +209,7 @@ export default function EnrollPage() {
   async function handleSubmit(embeddings) {
     setSubmitting(true)
     setSubmitError('')
+    setLoginError('')
 
     try {
       const avgEmbedding = averageEmbeddings(embeddings)
@@ -203,6 +222,8 @@ export default function EnrollPage() {
       const payload = {
         matric_number:   matricNumber.trim(),
         full_name:       fullName.trim(),
+        email:           email.trim().toLowerCase(),
+        password:        password,
         token:           token.trim(),
         embedding:       embeddingArray,
         iris_embedding:  irisArray,
@@ -236,16 +257,33 @@ export default function EnrollPage() {
         setQrDataURL(url)
       }
 
-      if (data.high_similarity_flag) {
-        setStep(5)
-      } else {
-        setStep(4)
+      let signedIn = true
+      try {
+        await login(email.trim().toLowerCase(), password)
+      } catch (err) {
+        signedIn = false
+        setLoginError(`Your account was created, but automatic sign-in failed: ${err.message}`)
       }
+
+      setStep(signedIn && data.high_similarity_flag ? 5 : 4)
     } catch (err) {
       setSubmitError(err.message)
       setIsCapturing(false)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleRetryLogin() {
+    setRetryingLogin(true)
+    try {
+      await login(email.trim().toLowerCase(), password)
+      setLoginError('')
+      setStep(enrollResult?.high_similarity_flag ? 5 : 4)
+    } catch (err) {
+      setLoginError(`Automatic sign-in failed: ${err.message}`)
+    } finally {
+      setRetryingLogin(false)
     }
   }
 
@@ -268,9 +306,13 @@ export default function EnrollPage() {
 
       const profile = buildBehaviouralProfile(motionFeatures, touchFeatures, keystrokeFeatures)
 
+      const authToken = localStorage.getItem('fa_token')
       const res = await fetch(`${API_BASE}/enroll/behavioural`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        },
         body: JSON.stringify({
           matric_number: matricNumber.trim(),
           token: token.trim(),
@@ -372,6 +414,35 @@ export default function EnrollPage() {
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label" htmlFor="account-email">School email</label>
+                  <input
+                    id="account-email"
+                    type="email"
+                    className="form-input"
+                    placeholder="you@unilorin.edu.ng"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    autoComplete="email"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="account-password">Create password</label>
+                  <input
+                    id="account-password"
+                    type="password"
+                    className="form-input"
+                    placeholder="At least 8 characters"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
                   <label className="form-label" htmlFor="token">Enrollment token</label>
                   <input
                     id="token"
@@ -392,9 +463,14 @@ export default function EnrollPage() {
                 </button>
               </form>
 
-              <p className="text-muted text-sm">
-                No token? Contact your lecturer to issue one for your matric number.
-              </p>
+              <div className="stack-sm">
+                <p className="text-muted text-sm">
+                  No token? Contact your lecturer to issue one for your matric number.
+                </p>
+                <p className="text-muted text-sm">
+                  Already enrolled? <Link to="/login">Sign in instead</Link>.
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -521,9 +597,30 @@ export default function EnrollPage() {
                 Raw facial images are not stored or transmitted. Only a facial embedding is processed on your device.
               </div>
 
+              {loginError && (
+                <div className="alert alert-warning stack-sm">
+                  <span>{loginError}</span>
+                  <div className="form-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={handleRetryLogin}
+                      disabled={retryingLogin}
+                    >
+                      {retryingLogin ? 'Retrying...' : 'Retry sign-in'}
+                    </button>
+                    <Link to="/login">Sign in manually</Link>
+                  </div>
+                </div>
+              )}
+
               <div className="form-actions">
-                <button id="btn-enroll-done" className="btn btn-primary btn-full" onClick={() => navigate('/login')}>
-                  Proceed to login
+                <button
+                  id="btn-enroll-done"
+                  className="btn btn-primary btn-full"
+                  onClick={() => navigate(loginError ? '/login' : '/student')}
+                >
+                  {loginError ? 'Go to sign in' : 'Go to dashboard'}
                 </button>
               </div>
             </div>

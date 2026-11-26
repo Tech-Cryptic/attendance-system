@@ -22,7 +22,7 @@ Live app: https://faceattend-bc91.onrender.com
 | Lecturer | `lecturer@unilorin.edu.ng` | `Lecturer1234!` |
 | Student | `student@unilorin.edu.ng` | `Student1234!` |
 
-The student account must complete biometric enrollment before regular attendance scans.
+New students start at `/enroll` with a lecturer issued token, complete biometric enrollment, and create their student login in the same flow. The demo student account is for testing only.
 
 ## Local setup
 
